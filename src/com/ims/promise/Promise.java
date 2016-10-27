@@ -3,181 +3,372 @@ package com.ims.promise;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.ims.tuple.Pair;
+import com.ims.tuple.Quartet;
+import com.ims.tuple.Triplet;
+
+/**
+ * @author bghoward
+ *
+ * @param <OUT>
+ */
 public class Promise<OUT> {
 	
-	private interface ExceptionHandler {
-		public void error(Throwable e);
+	/**
+	 * @author bghoward
+	 *
+	 */
+	public static interface IReject {
+		public void reject(Throwable t);
 	}
 	
-	private interface FinallyHandler {
-		public void doFinally();
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	public static interface IPromiseHandler<OUT,IN> extends IReject {
+		public OUT resolve(IN in) throws Exception;
+		public default void reject(Throwable t) {}	
+		public default void finish() {}
 	}
 	
-	private interface InComp<IN> extends ExceptionHandler, FinallyHandler {
-		public void apply(IN in);		
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	public static abstract class PromiseHandler<OUT,IN> implements IPromiseHandler<OUT, IN> {
+		public void reject(Throwable t) {}
+		public void finish() {}
+	};
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <A>
+	 * @param <B>
+	 */
+	public interface IPairCallback<OUT,A,B> extends IPromiseHandler<OUT, Pair<A,B>>  {
+		public OUT resolve(A a, B b) throws Exception;
+		public default OUT resolve(Pair<A,B> in) throws Exception {
+			return resolve(in.get0(), in.get1());
+		}
 	}
 	
-	private interface OutComp<OUT> {
-		public void addChild( InComp<OUT> child );		
-		public void setError(ExceptionHandler handler);
-		public void setFinally(FinallyHandler handler);
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <A>
+	 * @param <B>
+	 */
+	public static abstract class PairCallback<OUT,A,B> implements IPairCallback<OUT, A,B>  {		
+		public OUT resolve(Pair<A,B> in) throws Exception {
+			return resolve(in.get0(), in.get1());
+		}
 	}
 	
-	private static class Continuation<IN,OUT> implements OutComp<OUT>, InComp<IN> {
-		class Result {
-			public OUT out;
-			public Throwable exc;
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <A>
+	 * @param <B>
+	 * @param <C>
+	 */
+	public interface ITripletCallback<OUT,A,B,C> extends IPromiseHandler<OUT, Triplet<A,B,C>>  {
+		public OUT resolve(A a, B b, C c) throws Exception;
+		public default OUT resolve(Triplet<A,B,C> in) throws Exception {
+			return resolve(in.get0(), in.get1(), in.get2());
+		}
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <A>
+	 * @param <B>
+	 * @param <C>
+	 */
+	public static abstract class TripletCallback<OUT,A,B,C> implements ITripletCallback<OUT,A,B,C>  {		
+		public OUT resolve(Triplet<A,B,C> in) throws Exception {
+			return resolve(in.get0(), in.get1(), in.get2());
+		}
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <A>
+	 * @param <B>
+	 * @param <C>
+	 * @param <D>
+	 */
+	public interface IQuartetCallback<OUT,A,B,C,D> extends IPromiseHandler<OUT, Quartet<A,B,C,D>>  {
+		public OUT resolve(A a, B b, C c, D d) throws Exception;
+		public default OUT resolve(Quartet<A,B,C,D> in) throws Exception {
+			return resolve(in.get0(), in.get1(), in.get2(), in.get3());
+		}
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <A>
+	 * @param <B>
+	 * @param <C>
+	 * @param <D>
+	 */
+	public static abstract class QuartetCallback<OUT,A,B,C,D> implements IQuartetCallback<OUT,A,B,C,D>  {		
+		public OUT resolve(Quartet<A,B,C,D> in) throws Exception {
+			return resolve(in.get0(), in.get1(), in.get2(), in.get3());
+		}
+	}
+
+	/**
+	 * @author bghoward
+	 *
+	 * @param <IN>
+	 */
+	public interface IResolver<IN> {	
+		public void resolve(IN in);
+		public void reject(Throwable e);
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <IN>
+	 */
+	public interface ICallback<IN> {
+		void run(IResolver<IN> resolve);
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	public static interface IPromiseFunc<OUT,IN> extends IPromiseHandler<Promise<OUT>,IN> {
+		public Promise<OUT> resolve(IN in) throws Exception;
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 */
+	private static class ThreadContinuationProxy<OUT> implements IInComponent<OUT>, Runnable {
+		final IInComponent<OUT> mFwd;
+		Result<OUT> mResult;
+		Executor mExecutor;
+		
+		ThreadContinuationProxy( IInComponent<OUT> fwd, Executor exe ) {
+			mFwd = fwd;
+			mExecutor = exe;
+		}
+
+		@Override
+		public void run() {
+			assert(mResult != null);
+			mFwd.resolve(mResult);
+		}
+
+		@Override
+		public void resolve(Result<OUT> result) {
 			
-			public Result(OUT o, Throwable e) {
-				out = o;
-				exc = e;
+			// error occurred send it along, no need to spawn on another thread
+			if (result.error != null) {
+				mFwd.resolve(result);
+				return;
 			}
-			
-			public void applyTo(InComp<OUT> child) {
-				if (this.exc != null) {
-					child.error(this.exc);
-				} else {
-					child.apply(this.out);	
-				}				
-				child.doFinally();
-			}
+
+			// process the results in a background thread...
+			mResult = result; // assign the results	
+			mExecutor.execute(this);
+		}
+	};
+
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 */
+	private static class Result<OUT> {
+		public OUT out;
+		public Throwable error;
+		public Result(OUT o, Throwable err) {
+			this.out = o;
+			this.error = err;
+		}
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <IN>
+	 */
+	private interface IInComponent<IN> {
+		public void resolve(Result<IN> result);
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 */
+	private interface IOutComponent<OUT> {
+		public void addChild( IInComponent<OUT> child );
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	private static class Continuation<OUT,IN> implements IOutComponent<OUT>, IInComponent<IN> {
+
+		private List< IInComponent<OUT> > mChildren;
+		private Result<OUT> mResult;
+		private final IPromiseHandler<OUT,IN> mCallback;
+		
+		protected Continuation(Result<OUT> res) {
+			assert(res != null);
+			mCallback = null;
+			mResult = res;
 		}
 		
-		private List< InComp<OUT> > mChildren;
-		private Func<IN,OUT> mFunc;
-		private Result mResult;
-		
-		private ExceptionHandler mCatch;
-		private FinallyHandler mFinally;
-		
-		Continuation( Func<IN,OUT> func ) {
-			mFunc = func;
+		protected Continuation( IPromiseHandler<OUT,IN> cb ) {
+			mCallback = cb;
 		}
 		
 		@Override
-		public void setError(ExceptionHandler handler) {
-			Throwable e;
-			synchronized (this) {
-				mCatch = handler;
-				if (mResult == null) return;
-				
-				e = mResult.exc;
+		public void resolve( Result<IN> result ) {
+			if (result.error != null) {
+				reject(result.error);
+			} else {
+				resolve(result.out);
 			}
-			
-			assert(e != null);
-			handler.error(e);
+			mCallback.finish();
 		}
 		
-		@Override
-		public void setFinally(FinallyHandler handler) {
-			synchronized (this) {
-				mFinally = handler;
-				if (mResult == null) return;
-			}
-	
-			handler.doFinally();
-		}
-		
-		@Override
-		public void apply(IN in) {
-			Throwable exc = null;
-			OUT out = null;
+		private void resolve(IN in) {
+			Result<OUT> result;
 			try {
-				out = mFunc.apply(in);
+				OUT out = mCallback.resolve(in);
+				result = new Result<OUT>(out, null);
 			} catch (Exception e) {
-				exc = e;
-			}
-			Result result = new Result(out, exc);
-			
-			List< InComp<OUT> > children = null;			
-			synchronized (this) {				
+				result = new Result<OUT>(null, e);
+			}			
+			setResult(result);
+		}
+		
+		private void reject(Throwable t) {
+			try {
+				mCallback.reject(t);
+			} catch(Exception e) {}
+			setResult(new Result<OUT>(null, t));
+		}
+		
+		private void setResult(Result<OUT> result) {
+			List< IInComponent<OUT> > children = null;
+			synchronized (this) {
 				mResult = result;
 				children = mChildren;
 				mChildren = null;
 			}
 			
-			if (result.exc != null) 
-				this.error(result.exc);
-	
-			if (children != null) {
-				for (InComp<OUT> child : children) {
-					result.applyTo(child);
+			if (children == null) return;
+			
+			for (IInComponent<OUT> child : children) {
+				child.resolve(result);
+			}
+		}
+
+		@Override
+		public void addChild(IInComponent<OUT> child) {
+			
+			Result<OUT> result;
+			
+			// check the results to see if this promise is already resolved or not. This needs to be synchronized for
+			// thread access.
+			synchronized (this) {
+				result = mResult;
+				if (mResult == null) {
+					// first child, lazy creation of list
+					if (mChildren == null) mChildren = new ArrayList<>();
+					mChildren.add(child);					
 				}
 			}
 			
-			this.doFinally();
-		}
-	
-		public void doFinally() {
-			if (mFinally == null) return;
-			try {
-				mFinally.doFinally();
-			} catch (Exception e) {}
-		}
-		
-		public void error(Throwable e) {
-			if (mCatch == null) return;
-	
-			try {
-				mCatch.error(e);
-			} catch (Exception e2) {}
-		}
-	
-		@Override
-		public void addChild(InComp<OUT> child) {
-			
-			Result result;
-			synchronized (this) {
-				if (mResult == null) {
-					if (mChildren == null) mChildren = new ArrayList<>();
-					mChildren.add(child);
-					return;
-				}
-	
-				result = mResult;
-			}		
-	
-			assert(result != null);			
-			result.applyTo(child);
+			// this promise has already been resolved, go ahead and process the results!
+			if (result != null) child.resolve(result);
 		}		
 	}
 
+	private static Executor mMain;
+	private static Executor mBack;
+	private IOutComponent<OUT> mOut;
 
-	private OutComp<OUT> mOut;
-	private static ThreadPoolExecutor mPool;
-	private static BlockingQueue<Runnable> mQueue;
-	
 	static {
 		int cores = Runtime.getRuntime().availableProcessors();
-		mQueue = new LinkedBlockingQueue<>();
-		mPool = new ThreadPoolExecutor(2, cores, 10, TimeUnit.MINUTES, mQueue);
+		BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+		ThreadPoolExecutor exec = new ThreadPoolExecutor(2, cores, 10, TimeUnit.MINUTES, queue);
+		setBackgroundExecutor(exec); // set the default
+	}
+	
+	/**
+	 * @param main
+	 */
+	public static void setMainExecutor(Executor main) {
+		synchronized(Promise.class) {
+			mMain = main;
+		}
+	}
+	
+	/**
+	 * @param bg
+	 */
+	public static void setBackgroundExecutor(Executor bg) {
+		synchronized(Promise.class) {
+			mBack = bg;
+		}
 	}
 
-	private Promise(OutComp<OUT> out) {
+	/**
+	 * @param out
+	 */
+	private Promise(IOutComponent<OUT> out) {
 		mOut = out;
 	}
 	
+	/**
+	 * @param iter
+	 * @return
+	 */
 	public static<T> Promise<List<T>> all(final Iterable<Promise<T>> iter) {
 		
-		class PromiseList implements Callback<List<T>>, Func<T,Void>, ExceptionHandler {
+		class PromiseList implements IPromiseHandler<Void,T>, ICallback<List<T>> {
 			private List<T> list = new ArrayList<>();
 			private AtomicInteger counter = new AtomicInteger(0);
-			private Resolver<List<T>> mResolve;
+			private IResolver<List<T>> mResolve;
 			
-			public Void apply( T t ) {
-				synchronized (this) {
-					list.add(t);	
-				}				
-				decrement();
-				return null;
-			}
-			
-			public void run(Resolver<List<T>> resolve) {
+			public void run(IResolver<List<T>> resolve) {
 				mResolve = resolve;
 				increment();
 				for (Promise<T> promise : iter) {
@@ -196,251 +387,223 @@ public class Promise<OUT> {
 					mResolve.resolve(list);
 				}
 			}
-
-			@Override
-			public void error(Throwable e) {
+			
+			public void finish() {
 				decrement();
 			}
+
+			@Override
+			public Void resolve(T in) {
+				synchronized (this) {
+					list.add(in);	
+				}
+				return null;
+			}
+
+			@Override
+			public void reject(Throwable t) {} // TODO: how to return errors?
 		};
 		
 		return Promise.make(new PromiseList());
 	}
 	
-	public static <IN,OUT> Promise<OUT> async(final IN in, Func<IN,OUT> func) {
-		final Continuation<IN, OUT> cont = new Continuation<IN, OUT>(func);
+	/**
+	 * @param in
+	 * @param func
+	 * @return
+	 */
+	public static <IN,OUT> Promise<OUT> async(final IN in, IPromiseHandler<OUT,IN> cb) {
+		final Continuation<OUT,IN> cont = new Continuation<>(cb);
 
-		mPool.execute(new Runnable() {				
+		mBack.execute(new Runnable() {				
 			@Override
 			public void run() {
-				cont.apply(in);
+				cont.resolve(new Result<IN>(in, null));
 			}
 		});
 		return new Promise<>(cont);
 	}
 
-	public static <OUT> Promise<OUT> async(Func<Void,OUT> func) {
-		return async(null, func);
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> async(IPromiseHandler<OUT,Void> cb) {
+		return async(null, cb);
 	}
 	
-	public static <OUT> Promise<OUT> sync(Func<Void,OUT> func) {
-		return sync(null, func);
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> resolve(IPromiseHandler<OUT,Void> cb) {
+		return resolve(null, cb);
 	}
-	
-	public static <IN,OUT> Promise<OUT> sync(IN in, Func<IN,OUT> func) {
-		Continuation<IN, OUT> cont = new Continuation<>(func);
-		cont.apply(in);			
+
+	/**
+	 * @param in
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT,IN> Promise<OUT> resolve(IN in, IPromiseHandler<OUT,IN> cb) {
+		Continuation<OUT,IN> cont = new Continuation<>(cb);
+		cont.resolve(new Result<>(in, null));
 		return new Promise<>(cont);
 	}
-	
 
-	public interface Resolver<IN> {	
-		public void resolve(IN in);
-		public void reject(Throwable e);
+	/**
+	 * @param in
+	 * @return
+	 */
+	public static <INOUT> Promise<INOUT> resolve( INOUT in ) {
+		// resolve immediately
+		Result<INOUT> res = new Result<>(in, null);
+		return new Promise<>(new Continuation<INOUT,INOUT>(res));
 	}
 	
-	public interface Callback<IN> {
-		void run(Resolver<IN> resolve);
-	}
-	
-	public abstract class blah<IN> implements Func<IN,OUT> {
-		public OUT apply(IN in) { return resolve(in); }
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> make( ICallback<OUT> cb ) {
+		final Continuation<OUT, OUT> cont = new Continuation<>(new IPromiseHandler<OUT,OUT>() {
+			@Override
+			public OUT resolve(OUT in) {
+				return in;
+			}
+		});
 		
-		public abstract OUT resolve(IN in);
-		public Void reject(Throwable t) { return null; }
-//		public Void dofinally(Void);
-	}
-	
-	public interface PromiseFunc<IN,OUT> extends Func<IN, Promise<OUT>> {}
-
-	public static <OUT> Promise<OUT> resolve( OUT in ) {
-		final Continuation<OUT, OUT> cont = new Continuation<>(new Func<OUT, OUT>() {
-			public OUT apply(OUT in) {
-				return in;
-			}
-		});
-		cont.apply(in);
-		return new Promise<>(cont);
-	}
-	
-	public static <OUT> Promise<OUT> make( Callback<OUT> func ) {
-		final Continuation<OUT, OUT> cont = new Continuation<>(new Func<OUT, OUT>() {
-			public OUT apply(OUT in) {
-				return in;
-			}
-		});
-
-		Resolver<OUT> b = new Resolver<OUT>() {			
+		// wait for the callback to complete then forward the results to our continuation
+		cb.run(new IResolver<OUT>() {
+			@Override
 			public void resolve(OUT in) {
-				cont.apply(in);
+				// success!!
+				cont.resolve(new Result<OUT>(in,null));
 			}
 
-			public void reject(Throwable e) {
-				cont.error(e);
+			@Override
+			public void reject(Throwable t) {
+				// failure!!
+				cont.resolve(new Result<OUT>(null,t));
 			}
-		};
-		func.run(b);
+		});
 		return new Promise<>(cont);
 	}
 	
-	public <RT> Promise<RT> then( final PromiseFunc<OUT,RT> func ) {
-		class Proxy implements Callback<RT>, Func<Promise<RT>, RT>, ExceptionHandler {
-			private Resolver<RT> mProxy;
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final IPromiseFunc<RT,OUT> func ) {
+		// This is a special case of a promise returning another promise
+		
+		// We create a promise "proxy" that will wait for the promise of the promise to be resolved then forward the
+		// results
+		final IPromiseHandler<Promise<RT>,OUT> base = func;
+		return Promise.make(new ICallback<RT>() {
 
 			@Override
-			public void run(Resolver<RT> resolve) {
-				mProxy = resolve;
-			}
-
-			@Override
-			public RT apply(Promise<RT> in) {
-				if (in == null) {
-					mProxy.resolve(null);
-					return null;
-				}
+			public void run(final IResolver<RT> promise) {
 				
-				in.then(new Func<RT,Void>() {					
-					public Void apply(RT rt) {
-						mProxy.resolve(rt);
+				// call the outer promise and wait for the promised result
+				Promise.this.then(base).then(new IPromiseHandler<Void,Promise<RT>>() {
+					@Override
+					public Void resolve(Promise<RT> in) {
+						
+						// now we call the inner promise and forward the results
+						in.then(new IPromiseHandler<Void,RT>() {
+							@Override
+							public Void resolve(RT in) {
+								promise.resolve(in);
+								return null;
+							}	
+							
+							@Override
+							public void reject(Throwable t) {
+								promise.reject(t);
+							}
+						});
 						return null;
 					}
-				})
-				.thenCatch(new Func<Throwable,Void>() {					
-					public Void apply(Throwable t) {
-						mProxy.reject(t);
-						return null;
+					
+					@Override
+					public void reject(Throwable t) {
+						promise.reject(t);
 					}
-				});
-				return null;
-			}
-
-			@Override
-			public void error(Throwable e) {
-				if (mProxy != null) mProxy.reject(e);
-			}
-		};
-		
-		Continuation<OUT, Promise<RT>> cont = new Continuation<>(func);
-		Promise<Promise<RT>> promise = new Promise<Promise<RT>>(cont);
-
-		final Proxy proxy = new Proxy();
-		promise.then(proxy)
-		.thenCatch(new Func<Throwable,Void>() {
-			
-			@Override
-			public Void apply(Throwable in) {
-				proxy.error(in);
-				return null;
+				});				
 			}
 		});
-
-		Promise<RT> rt = Promise.make(proxy);		
-		mOut.addChild(cont);		
-		return rt;
 	}
 	
-	public <RT> Promise<RT> then( final Func<OUT, RT> func ) {
-		Continuation<OUT, RT> cont = new Continuation<>(func);
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final IPromiseHandler<RT,OUT> func ) {
+		Continuation<RT,OUT> cont = new Continuation<>(func);
 		mOut.addChild(cont);			
-		return new Promise<>(cont);
+		return new Promise<RT>(cont);
+	}
+	
+	@SuppressWarnings("unchecked")
+	public <RT,A,B> Promise<RT> then( final IPairCallback<RT,A,B> func ) {
+		Continuation<RT,Pair<A,B>> cont = new Continuation<>(func);
+		mOut.addChild((IInComponent<OUT>) cont);			
+		return new Promise<RT>(cont);
+	}
+	
+	@SuppressWarnings("unchecked")
+	public <RT,A,B,C> Promise<RT> then( final ITripletCallback<RT,A,B,C> func ) {
+		Continuation<RT,Triplet<A,B,C>> cont = new Continuation<>(func);
+		mOut.addChild((IInComponent<OUT>) cont);			
+		return new Promise<RT>(cont);
+	}
+	
+	@SuppressWarnings("unchecked")
+	public <RT,A,B,C,D> Promise<RT> then( final IQuartetCallback<RT,A,B,C,D> func ) {
+		Continuation<RT,Quartet<A,B,C,D>> cont = new Continuation<>(func);
+		mOut.addChild((IInComponent<OUT>) cont);			
+		return new Promise<RT>(cont);
 	}
 
-//	public <RT> Promise<RT> thenOnUI(final Func<OUT, RT> func ) {
-//		final Continuation<OUT, RT> cont = new Continuation<>(func);
-//
-//		class Proxy implements InComp<OUT>, Runnable {
-//			OUT mIn;
-//
-//			@Override
-//			public void apply(OUT in) {
-//				mIn = in;
-//				new android.os.Handler(Looper.getMainLooper()).post(this);
-//			}
-//
-//			@Override
-//			public void run() {
-//				cont.apply(mIn);
-//			}
-//
-//			@Override
-//			public void error(Throwable e) {
-//				cont.error(e);
-//			}
-//
-//			@Override
-//			public void doFinally() {
-//				cont.doFinally();
-//			}
-//		};
-//		mOut.addChild(new Proxy());
-//		return new Promise<>(cont);
-//	}
-	
-	public <RT> Promise<RT> thenAsync( final Func<OUT, RT> func ) {
-		final Continuation<OUT, RT> cont = new Continuation<>(func);
-		
-		class Proxy implements InComp<OUT>, Runnable {
-			OUT mIn;
-			
-			@Override
-			public void apply(OUT in) {
-				mIn = in;
-				mPool.execute(this);
-			}
-			
-			@Override
-			public void run() {
-				cont.apply(mIn);
-			}
-
-			@Override
-			public void error(Throwable e) {
-				cont.error(e);
-			}
-
-			@Override
-			public void doFinally() {
-				cont.doFinally();					
-			}
-		};
-		mOut.addChild(new Proxy());
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenAsync( final IPromiseHandler<RT,OUT> func ) {
+		final Continuation<RT,OUT> cont = new Continuation<>(func);
+		mOut.addChild(new ThreadContinuationProxy<OUT>(cont, mBack));
 		return new Promise<>(cont);
 	}
 	
-	public <RT> Promise<RT> thenCatch( Func<Throwable,RT> thenCatch, Func<Void,RT> thenFinally ) {
-		thenCatch(thenCatch);
-		return thenFinally(thenFinally);
-		
-		
-//		final Continuation<Throwable, RT> cont = new Continuation<>(thenFinally);
-//		mOut.setError(new ExceptionHandler() {
-//			@Override
-//			public void error(Throwable e) {
-//				cont.apply(e);
-//			}
-//		});
-//		return new Promise<>(cont);
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenOnMain( final IPromiseHandler<RT,OUT> func ) {
+		// TODO: run on main thread somehow...
+		final Continuation<RT,OUT> cont = new Continuation<>(func);
+		mOut.addChild(new ThreadContinuationProxy<OUT>(cont, mMain));
+		return new Promise<>(cont);
 	}
 	
-	public <RT> Promise<RT> thenCatch( Func<Throwable,RT> func ) {
-		final Continuation<Throwable, RT> cont = new Continuation<>(func);
-		mOut.setError(new ExceptionHandler() {
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public Promise<Void> thenCatch(final IReject handler) {
+		return this.then(new IPromiseHandler<Void,OUT>() {
 			@Override
-			public void error(Throwable e) {
-				cont.apply(e);
+			public Void resolve(OUT in) { 
+				return null; // we don't care about success results...
 			}
+
+			@Override
+			public void reject(Throwable t) {
+				handler.reject(t); // forward the error
+			}			
 		});
-		return new Promise<>(cont);
-	}
-	
-	public <RT> Promise<RT> thenFinally( Func<Void,RT> func ) {
-		final Continuation<Void, RT> cont = new Continuation<>(func);
-		mOut.setFinally(new FinallyHandler() {
-			@Override
-			public void doFinally() {
-				cont.apply(null);
-			}
-		});
-		return new Promise<>(cont);
 	}
 }
 
