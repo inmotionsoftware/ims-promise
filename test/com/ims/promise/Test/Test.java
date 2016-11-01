@@ -1,7 +1,9 @@
 package com.ims.promise.Test;
 
 import com.ims.promise.Promise;
-import com.ims.promise.Promise.IPromiseFunc;
+import com.ims.promise.Promise.IDeferred;
+import com.ims.promise.Promise.IResolve;
+import com.ims.promise.Promise.PromiseHandler;
 import com.ims.tuple.Tuple;
 
 public class Test {
@@ -9,7 +11,18 @@ public class Test {
 	public static void main(String[] args) {
 		System.out.println("init"); 
 		
-		final boolean[] done = new boolean[] {false};
+		final boolean[] done = new boolean[] {false};	
+
+		Promise.resolve(1)
+		.then( (Integer i) -> Integer.toString(i) )
+		.then( (String s) -> s + "" )
+		.then( (String s) -> Tuple.make(1,2,s) )
+		.then( (Integer a, Integer b, String c) -> "" )
+		.thenAsync( (String s) -> s.split(".") )
+		.thenOnMain( (String[] s) -> Integer.parseInt(s[0]) )
+		.fail( (Throwable t) -> {
+			System.out.println("Error: " + t);
+		});
 		
 		Promise.resolve( (Void) -> 5 )
 		.then( (Integer i) -> {
@@ -23,7 +36,7 @@ public class Test {
 			return ":) " + v;
 		}))
 		.then( (String s ) -> s + " :(")
-		.then(new IPromiseFunc<Void,String>() {
+		.then(new PromiseHandler<Void,String>() {
 			@Override
 			public Promise<Void> resolve(String in) throws Exception {
 				System.out.println("finished!");
@@ -36,15 +49,21 @@ public class Test {
 			}
 			
 			@Override
-			public void finish() {
+			public void always() {
 				done[0] = true;
 			}
 		});
-//		.thenCatch( (Throwable t) -> {
-//			System.err.print("Error: " + t);
-//			done[0] = true;
-//		});
 		
+		String strnum = "...";
+		Promise.make((IDeferred<Integer> d) -> {
+			try {
+				Integer i = Integer.parseInt(strnum);
+				d.resolve(i);
+			} catch (NumberFormatException e) {
+				d.reject(e);
+			}
+		});
+
 		System.out.println("promise created!");
 
 		while (!done[0]) {

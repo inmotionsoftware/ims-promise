@@ -11,7 +11,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.ims.tuple.Pair;
 import com.ims.tuple.Quartet;
+import com.ims.tuple.Quintet;
 import com.ims.tuple.Triplet;
+import com.ims.tuple.Unary;
 
 /**
  * @author bghoward
@@ -31,54 +33,68 @@ public class Promise<OUT> {
 	/**
 	 * @author bghoward
 	 *
-	 * @param <OUT>
-	 * @param <IN>
 	 */
-	public static interface IPromiseHandler<OUT,IN> extends IReject {
+	public static interface IAlways {
+		public void always();
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 */
+	public static interface IResolve<OUT,IN> {
 		public OUT resolve(IN in) throws Exception;
-		public default void reject(Throwable t) {}	
-		public default void finish() {}
 	}
 	
 	/**
+	 * 
 	 * @author bghoward
 	 *
 	 * @param <OUT>
 	 * @param <IN>
 	 */
-	public static abstract class PromiseHandler<OUT,IN> implements IPromiseHandler<OUT, IN> {
+	public static abstract class Handler<OUT,IN> implements IResolve<OUT,IN>, IReject, IAlways {
+		public OUT resolve(IN in) throws Exception { return null; }
+		public void always() {}
 		public void reject(Throwable t) {}
-		public void finish() {}
-	};
+	}
 	
 	/**
+	 * 
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	public static abstract class PromiseHandler<OUT,IN> extends Handler<Promise<OUT>,IN> {
+		public abstract Promise<OUT> resolve(IN in) throws Exception;
+	}
+	
+	/**
+	 * 
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <A>
+	 */
+	public interface IUnaryCallback<OUT,A> {
+		public OUT resolve(A a) throws Exception;
+	}
+	
+	/**
+	 * 
 	 * @author bghoward
 	 *
 	 * @param <OUT>
 	 * @param <A>
 	 * @param <B>
 	 */
-	public interface IPairCallback<OUT,A,B> extends IPromiseHandler<OUT, Pair<A,B>>  {
+	public interface IPairCallback<OUT,A,B> {
 		public OUT resolve(A a, B b) throws Exception;
-		public default OUT resolve(Pair<A,B> in) throws Exception {
-			return resolve(in.get0(), in.get1());
-		}
 	}
 	
 	/**
-	 * @author bghoward
-	 *
-	 * @param <OUT>
-	 * @param <A>
-	 * @param <B>
-	 */
-	public static abstract class PairCallback<OUT,A,B> implements IPairCallback<OUT, A,B>  {		
-		public OUT resolve(Pair<A,B> in) throws Exception {
-			return resolve(in.get0(), in.get1());
-		}
-	}
-	
-	/**
+	 * 
 	 * @author bghoward
 	 *
 	 * @param <OUT>
@@ -86,28 +102,12 @@ public class Promise<OUT> {
 	 * @param <B>
 	 * @param <C>
 	 */
-	public interface ITripletCallback<OUT,A,B,C> extends IPromiseHandler<OUT, Triplet<A,B,C>>  {
+	public interface ITripletCallback<OUT,A,B,C> {
 		public OUT resolve(A a, B b, C c) throws Exception;
-		public default OUT resolve(Triplet<A,B,C> in) throws Exception {
-			return resolve(in.get0(), in.get1(), in.get2());
-		}
 	}
 	
 	/**
-	 * @author bghoward
-	 *
-	 * @param <OUT>
-	 * @param <A>
-	 * @param <B>
-	 * @param <C>
-	 */
-	public static abstract class TripletCallback<OUT,A,B,C> implements ITripletCallback<OUT,A,B,C>  {		
-		public OUT resolve(Triplet<A,B,C> in) throws Exception {
-			return resolve(in.get0(), in.get1(), in.get2());
-		}
-	}
-	
-	/**
+	 * 
 	 * @author bghoward
 	 *
 	 * @param <OUT>
@@ -116,14 +116,12 @@ public class Promise<OUT> {
 	 * @param <C>
 	 * @param <D>
 	 */
-	public interface IQuartetCallback<OUT,A,B,C,D> extends IPromiseHandler<OUT, Quartet<A,B,C,D>>  {
+	public interface IQuartetCallback<OUT,A,B,C,D> {
 		public OUT resolve(A a, B b, C c, D d) throws Exception;
-		public default OUT resolve(Quartet<A,B,C,D> in) throws Exception {
-			return resolve(in.get0(), in.get1(), in.get2(), in.get3());
-		}
 	}
 	
 	/**
+	 * 
 	 * @author bghoward
 	 *
 	 * @param <OUT>
@@ -131,11 +129,10 @@ public class Promise<OUT> {
 	 * @param <B>
 	 * @param <C>
 	 * @param <D>
+	 * @param <E>
 	 */
-	public static abstract class QuartetCallback<OUT,A,B,C,D> implements IQuartetCallback<OUT,A,B,C,D>  {		
-		public OUT resolve(Quartet<A,B,C,D> in) throws Exception {
-			return resolve(in.get0(), in.get1(), in.get2(), in.get3());
-		}
+	public interface IQuintetCallback<OUT,A,B,C,D,E> {
+		public OUT resolve(A a, B b, C c, D d, E e) throws Exception;
 	}
 
 	/**
@@ -143,7 +140,7 @@ public class Promise<OUT> {
 	 *
 	 * @param <IN>
 	 */
-	public interface IResolver<IN> {	
+	public static interface IDeferred<IN> {	
 		public void resolve(IN in);
 		public void reject(Throwable e);
 	}
@@ -153,20 +150,10 @@ public class Promise<OUT> {
 	 *
 	 * @param <IN>
 	 */
-	public interface ICallback<IN> {
-		void run(IResolver<IN> resolve);
+	public static interface Deferrable<IN> {
+		void run(IDeferred<IN> resolve);
 	}
-	
-	/**
-	 * @author bghoward
-	 *
-	 * @param <OUT>
-	 * @param <IN>
-	 */
-	public static interface IPromiseFunc<OUT,IN> extends IPromiseHandler<Promise<OUT>,IN> {
-		public Promise<OUT> resolve(IN in) throws Exception;
-	}
-	
+
 	/**
 	 * @author bghoward
 	 *
@@ -245,7 +232,7 @@ public class Promise<OUT> {
 
 		private List< IInComponent<OUT> > mChildren;
 		private Result<OUT> mResult;
-		private final IPromiseHandler<OUT,IN> mCallback;
+		private final Handler<OUT,IN> mCallback;
 		
 		protected Continuation(Result<OUT> res) {
 			assert(res != null);
@@ -253,7 +240,7 @@ public class Promise<OUT> {
 			mResult = res;
 		}
 		
-		protected Continuation( IPromiseHandler<OUT,IN> cb ) {
+		protected Continuation( Handler<OUT,IN> cb ) {
 			mCallback = cb;
 		}
 		
@@ -264,7 +251,7 @@ public class Promise<OUT> {
 			} else {
 				resolve(result.out);
 			}
-			mCallback.finish();
+			mCallback.always();
 		}
 		
 		private void resolve(IN in) {
@@ -321,23 +308,35 @@ public class Promise<OUT> {
 		}		
 	}
 
-	private static Executor mMain;
-	private static Executor mBack;
+	private static Executor gMain;
+	private static Executor gBack;
+
+	private static Executor getMain() {
+		return gMain;
+	}
+	
+	private static Executor getBG() {
+		synchronized(Promise.class) {
+			if (gBack == null) {
+				int cores = Runtime.getRuntime().availableProcessors();
+				BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+				ThreadPoolExecutor exec = new ThreadPoolExecutor(2, cores, 10, TimeUnit.MINUTES, queue);
+				setBackgroundExecutor(exec); // set the default
+			}
+			return gBack;
+		}
+	}
+	
+	
 	private IOutComponent<OUT> mOut;
 
-	static {
-		int cores = Runtime.getRuntime().availableProcessors();
-		BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
-		ThreadPoolExecutor exec = new ThreadPoolExecutor(2, cores, 10, TimeUnit.MINUTES, queue);
-		setBackgroundExecutor(exec); // set the default
-	}
 	
 	/**
 	 * @param main
 	 */
 	public static void setMainExecutor(Executor main) {
 		synchronized(Promise.class) {
-			mMain = main;
+			gMain = main;
 		}
 	}
 	
@@ -346,7 +345,7 @@ public class Promise<OUT> {
 	 */
 	public static void setBackgroundExecutor(Executor bg) {
 		synchronized(Promise.class) {
-			mBack = bg;
+			gBack = bg;
 		}
 	}
 
@@ -363,12 +362,13 @@ public class Promise<OUT> {
 	 */
 	public static<T> Promise<List<T>> all(final Iterable<Promise<T>> iter) {
 		
-		class PromiseList implements IPromiseHandler<Void,T>, ICallback<List<T>> {
+		class PromiseList extends Handler<Void,T> implements Deferrable<List<T>> {
 			private List<T> list = new ArrayList<>();
 			private AtomicInteger counter = new AtomicInteger(0);
-			private IResolver<List<T>> mResolve;
+			private IDeferred<List<T>> mResolve;
 			
-			public void run(IResolver<List<T>> resolve) {
+			@Override
+			public void run(IDeferred<List<T>> resolve) {
 				mResolve = resolve;
 				increment();
 				for (Promise<T> promise : iter) {
@@ -388,7 +388,8 @@ public class Promise<OUT> {
 				}
 			}
 			
-			public void finish() {
+			@Override
+			public void always() {
 				decrement();
 			}
 
@@ -412,42 +413,134 @@ public class Promise<OUT> {
 	 * @param func
 	 * @return
 	 */
-	public static <IN,OUT> Promise<OUT> async(final IN in, IPromiseHandler<OUT,IN> cb) {
-		final Continuation<OUT,IN> cont = new Continuation<>(cb);
+	public static <IN,OUT> Promise<OUT> main(final IN in, Handler<OUT,IN> cb) {
+		return resolve(in, cb, getMain());
+	}
 
-		mBack.execute(new Runnable() {				
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> main(Handler<OUT,Void> cb) {
+		return resolve(null, cb, getMain());
+	}
+	
+	/**
+	 * @param in
+	 * @param func
+	 * @return
+	 */
+	public static <IN,OUT> Promise<OUT> main(final IN in, IResolve<OUT,IN> cb) {
+		return resolve(in, cb, getMain());
+	}
+
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> main(IResolve<OUT,Void> cb) {
+		return resolve(null, cb, getMain());
+	}
+	
+	/**
+	 * @param in
+	 * @param func
+	 * @return
+	 */
+	public static <IN,OUT> Promise<OUT> async(final IN in, IResolve<OUT,IN> cb) {
+		return resolve(in, cb, getBG());
+	}
+
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> async(IResolve<OUT,Void> cb) {
+		return resolve(null, cb, getBG());
+	}
+	
+	/**
+	 * @param in
+	 * @param func
+	 * @return
+	 */
+	public static <IN,OUT> Promise<OUT> async(final IN in, Handler<OUT,IN> cb) {
+		return resolve(in, cb, getBG());
+	}
+
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> async(Handler<OUT,Void> cb) {
+		return resolve(null, cb, getBG());
+	}
+
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> resolve(IResolve<OUT,Void> cb) {
+		return resolve(null, cb, null);
+	}
+	
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> resolve(Handler<OUT,Void> cb) {
+		return resolve(null, cb, null);
+	}
+	
+	/**
+	 * @param in
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT,IN> Promise<OUT> resolve(IN in, IResolve<OUT,IN> cb) {
+		return resolve(in, cb, null);
+	}
+
+	/**
+	 * @param in
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT,IN> Promise<OUT> resolve(IN in, Handler<OUT,IN> cb) {
+		return resolve(in, cb, null);
+	}
+	
+	/**
+	 * 
+	 * @param in
+	 * @param cb
+	 * @param exe
+	 * @return
+	 */
+	public static <OUT,IN> Promise<OUT> resolve(IN in, IResolve<OUT,IN> cb, Executor exe) {
+		return resolve(in, new Handler<OUT, IN>() {
 			@Override
-			public void run() {
-				cont.resolve(new Result<IN>(in, null));
+			public OUT resolve(IN in) throws Exception {
+				return cb.resolve(in);
 			}
-		});
-		return new Promise<>(cont);
-	}
-
-	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> async(IPromiseHandler<OUT,Void> cb) {
-		return async(null, cb);
+		}, exe);
 	}
 	
 	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> resolve(IPromiseHandler<OUT,Void> cb) {
-		return resolve(null, cb);
-	}
-
-	/**
+	 * 
 	 * @param in
 	 * @param cb
+	 * @param exe
 	 * @return
 	 */
-	public static <OUT,IN> Promise<OUT> resolve(IN in, IPromiseHandler<OUT,IN> cb) {
-		Continuation<OUT,IN> cont = new Continuation<>(cb);
-		cont.resolve(new Result<>(in, null));
+	public static <OUT,IN> Promise<OUT> resolve(IN in, Handler<OUT,IN> cb, Executor exe) {
+		final Continuation<OUT,IN> cont = new Continuation<>(cb);
+		if (exe != null) {
+			ThreadContinuationProxy<IN> proxy = new ThreadContinuationProxy<>(cont, exe);
+			proxy.resolve(new Result<>(in, null));
+		} else {
+			cont.resolve(new Result<>(in, null));
+		}
 		return new Promise<>(cont);
 	}
 
@@ -455,18 +548,18 @@ public class Promise<OUT> {
 	 * @param in
 	 * @return
 	 */
-	public static <INOUT> Promise<INOUT> resolve( INOUT in ) {
+	public static <IN> Promise<IN> resolve( IN in ) {
 		// resolve immediately
-		Result<INOUT> res = new Result<>(in, null);
-		return new Promise<>(new Continuation<INOUT,INOUT>(res));
+		Result<IN> res = new Result<>(in, null);
+		return new Promise<>(new Continuation<IN,IN>(res));
 	}
 	
 	/**
 	 * @param cb
 	 * @return
 	 */
-	public static <OUT> Promise<OUT> make( ICallback<OUT> cb ) {
-		final Continuation<OUT, OUT> cont = new Continuation<>(new IPromiseHandler<OUT,OUT>() {
+	public static <OUT> Promise<OUT> make( Deferrable<OUT> cb ) {
+		final Continuation<OUT, OUT> cont = new Continuation<>(new Handler<OUT,OUT>() {
 			@Override
 			public OUT resolve(OUT in) {
 				return in;
@@ -474,7 +567,7 @@ public class Promise<OUT> {
 		});
 		
 		// wait for the callback to complete then forward the results to our continuation
-		cb.run(new IResolver<OUT>() {
+		cb.run(new IDeferred<OUT>() {
 			@Override
 			public void resolve(OUT in) {
 				// success!!
@@ -495,24 +588,23 @@ public class Promise<OUT> {
 	 * @param func
 	 * @return
 	 */
-	public <RT> Promise<RT> then( final IPromiseFunc<RT,OUT> func ) {
+	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> func ) {
 		// This is a special case of a promise returning another promise
 		
 		// We create a promise "proxy" that will wait for the promise of the promise to be resolved then forward the
 		// results
-		final IPromiseHandler<Promise<RT>,OUT> base = func;
-		return Promise.make(new ICallback<RT>() {
-
+		final Handler<Promise<RT>,OUT> base = func;
+		return Promise.make(new Deferrable<RT>() {
 			@Override
-			public void run(final IResolver<RT> promise) {
+			public void run(final IDeferred<RT> promise) {
 				
 				// call the outer promise and wait for the promised result
-				Promise.this.then(base).then(new IPromiseHandler<Void,Promise<RT>>() {
+				Promise.this.then(base).then(new Handler<Void,Promise<RT>>() {
 					@Override
 					public Void resolve(Promise<RT> in) {
 						
 						// now we call the inner promise and forward the results
-						in.then(new IPromiseHandler<Void,RT>() {
+						in.then(new Handler<Void,RT>() {
 							@Override
 							public Void resolve(RT in) {
 								promise.resolve(in);
@@ -523,6 +615,9 @@ public class Promise<OUT> {
 							public void reject(Throwable t) {
 								promise.reject(t);
 							}
+							
+							@Override
+							public void always() {}
 						});
 						return null;
 					}
@@ -531,79 +626,186 @@ public class Promise<OUT> {
 					public void reject(Throwable t) {
 						promise.reject(t);
 					}
+					
+					@Override
+					public void always() {}
 				});				
 			}
 		});
 	}
 	
 	/**
-	 * @param func
+	 * 
+	 * @param handler
+	 * @param exe
 	 * @return
 	 */
-	public <RT> Promise<RT> then( final IPromiseHandler<RT,OUT> func ) {
-		Continuation<RT,OUT> cont = new Continuation<>(func);
-		mOut.addChild(cont);			
-		return new Promise<RT>(cont);
-	}
+	public <RT> Promise<RT> then( final Handler<RT, OUT> handler, Executor exe ) {
+		final Continuation<RT,OUT> cont = new Continuation<>(handler);
+		if (exe != null) {
+			mOut.addChild(new ThreadContinuationProxy<OUT>(cont, exe));
+		} else {
+			mOut.addChild(cont);
+		}
+		return new Promise<>(cont);
+	}	
 	
-	@SuppressWarnings("unchecked")
-	public <RT,A,B> Promise<RT> then( final IPairCallback<RT,A,B> func ) {
-		Continuation<RT,Pair<A,B>> cont = new Continuation<>(func);
-		mOut.addChild((IInComponent<OUT>) cont);			
-		return new Promise<RT>(cont);
+	/**
+	 * 
+	 * @param handler
+	 * @return
+	 */
+	public <RT> Promise<RT> then(final IResolve<RT, OUT> handler, Executor exe ) {
+		return this.then(new Handler<RT,OUT>() {
+			@Override
+			public RT resolve(OUT in) throws Exception { return handler.resolve(in); }
+		}, exe);
 	}
-	
-	@SuppressWarnings("unchecked")
-	public <RT,A,B,C> Promise<RT> then( final ITripletCallback<RT,A,B,C> func ) {
-		Continuation<RT,Triplet<A,B,C>> cont = new Continuation<>(func);
-		mOut.addChild((IInComponent<OUT>) cont);			
-		return new Promise<RT>(cont);
-	}
-	
-	@SuppressWarnings("unchecked")
-	public <RT,A,B,C,D> Promise<RT> then( final IQuartetCallback<RT,A,B,C,D> func ) {
-		Continuation<RT,Quartet<A,B,C,D>> cont = new Continuation<>(func);
-		mOut.addChild((IInComponent<OUT>) cont);			
-		return new Promise<RT>(cont);
+
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final Handler<RT,OUT> cb ) {
+		return this.then(cb, null);
 	}
 
 	/**
 	 * @param func
 	 * @return
 	 */
-	public <RT> Promise<RT> thenAsync( final IPromiseHandler<RT,OUT> func ) {
-		final Continuation<RT,OUT> cont = new Continuation<>(func);
-		mOut.addChild(new ThreadContinuationProxy<OUT>(cont, mBack));
-		return new Promise<>(cont);
+	public <RT> Promise<RT> thenAsync( final Handler<RT,OUT> func ) {
+		return then(func, getBG());
 	}
 	
 	/**
 	 * @param func
 	 * @return
 	 */
-	public <RT> Promise<RT> thenOnMain( final IPromiseHandler<RT,OUT> func ) {
-		// TODO: run on main thread somehow...
-		final Continuation<RT,OUT> cont = new Continuation<>(func);
-		mOut.addChild(new ThreadContinuationProxy<OUT>(cont, mMain));
-		return new Promise<>(cont);
+	public <RT> Promise<RT> thenOnMain( final Handler<RT,OUT> func ) {
+		return then(func, getMain());
+	}
+	
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final IResolve<RT,OUT> cb ) {
+		return this.then(cb, null);
+	}
+
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenAsync( final IResolve<RT,OUT> func ) {
+		return then(func, getBG());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenOnMain( final IResolve<RT,OUT> func ) {
+		return then(func, getMain());
+	}
+
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public Promise<Void> always(final IAlways handler) {
+		return this.then(new Handler<Void,OUT>() {			
+			@Override
+			public void always() { handler.always(); }
+		});
 	}
 	
 	/**
 	 * @param handler
 	 * @return
 	 */
-	public Promise<Void> thenCatch(final IReject handler) {
-		return this.then(new IPromiseHandler<Void,OUT>() {
+	public Promise<Void> fail(final IReject handler) {
+		return this.then(new Handler<Void,OUT>() {
 			@Override
-			public Void resolve(OUT in) { 
-				return null; // we don't care about success results...
-			}
-
-			@Override
-			public void reject(Throwable t) {
-				handler.reject(t); // forward the error
-			}			
+			public void reject(Throwable t) { handler.reject(t); }
 		});
 	}
+	
+	/**
+	 * 
+	 * @param cb
+	 * @return
+	 */
+	@SuppressWarnings("unchecked")
+	public <RT,A> Promise<RT> then( final IUnaryCallback<RT,A> cb ) {
+		return this.then((Handler<RT,OUT>) new Handler<RT, Unary<A>>() {
+			@Override
+			public RT resolve(Unary<A> in) throws Exception {
+				return cb.resolve(in.get0());
+			}
+		}, null);
+	}
+	
+	/**
+	 * 
+	 * @param cb
+	 * @return
+	 */
+	@SuppressWarnings("unchecked")
+	public <RT,A,B> Promise<RT> then( final IPairCallback<RT,A,B> cb ) {
+		return this.then((Handler<RT,OUT>) new Handler<RT, Pair<A,B>>() {
+			@Override
+			public RT resolve(Pair<A,B> in) throws Exception {
+				return cb.resolve(in.get0(), in.get1());
+			}
+		}, null);
+	}
+	
+	/**
+	 * 
+	 * @param cb
+	 * @return
+	 */
+	@SuppressWarnings("unchecked")
+	public <RT,A,B,C> Promise<RT> then( final ITripletCallback<RT,A,B,C> cb ) {
+		return this.then((Handler<RT,OUT>) new Handler<RT, Triplet<A,B,C>>() {
+			@Override
+			public RT resolve(Triplet<A,B,C> in) throws Exception {
+				return cb.resolve(in.get0(), in.get1(), in.get2());
+			}
+		}, null);
+	}
+	
+	/**
+	 * 
+	 * @param cb
+	 * @return
+	 */
+	@SuppressWarnings("unchecked")
+	public <RT,A,B,C,D> Promise<RT> then( final IQuartetCallback<RT,A,B,C,D> cb ) {
+		return this.then((Handler<RT,OUT>) new Handler<RT, Quartet<A,B,C,D>>() {
+			@Override
+			public RT resolve(Quartet<A,B,C,D> in) throws Exception {
+				return cb.resolve(in.get0(), in.get1(), in.get2(), in.get3());
+			}
+		}, null);
+	}
+	
+	/**
+	 * 
+	 * @param cb
+	 * @return
+	 */
+	@SuppressWarnings("unchecked")
+	public <RT,A,B,C,D,E> Promise<RT> then( final IQuintetCallback<RT,A,B,C,D,E> cb ) {
+		return this.then((Handler<RT,OUT>) new Handler<RT, Quintet<A,B,C,D,E>>() {
+			@Override
+			public RT resolve(Quintet<A,B,C,D,E> in) throws Exception {
+				return cb.resolve(in.get0(), in.get1(), in.get2(), in.get3(), in.get4());
+			}
+		}, null);
+	}
+
 }
 

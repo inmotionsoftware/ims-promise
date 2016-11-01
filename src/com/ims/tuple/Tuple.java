@@ -22,8 +22,7 @@ public abstract class Tuple {
 			return m_Parent.get(m_Idx);
 		}
 	};
-	
-	
+
 	public abstract int getSize();
 	public abstract int indexOf(Object o);
 	public abstract int lastIndexOf(Object o);
@@ -54,6 +53,10 @@ public abstract class Tuple {
 		return new Quartet<A,B,C,D>(a,b,c,d);
 	}
 	
+	public static <A,B,C,D,E> Quintet<A,B,C,D,E> make(A a, B b, C c, D d, E e) {
+		return new Quintet<A,B,C,D,E>(a,b,c,d,e);
+	}
+	
 	public static Tuple make(Object...objects) throws IndexOutOfBoundsException {
 
 		switch(objects.length) {
@@ -65,6 +68,8 @@ public abstract class Tuple {
 			return new Triplet<Object,Object,Object>(objects[0], objects[1], objects[2]);
 		case 4:
 			return new Quartet<Object,Object,Object,Object>(objects[0], objects[1], objects[2], objects[3]);
+		case 5:
+			return new Quintet<Object,Object,Object,Object,Object>(objects[0], objects[1], objects[2], objects[3], objects[4]);
 		default:
 			throw new IndexOutOfBoundsException();
 		}
