@@ -1,44 +1,92 @@
 package com.ims.promise.Test;
 
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Executor;
+
 import com.ims.promise.Promise;
+import com.ims.promise.Promise.Handler;
 import com.ims.promise.Promise.IDeferred;
 import com.ims.promise.Promise.IResolve;
 import com.ims.promise.Promise.PromiseHandler;
 import com.ims.tuple.Tuple;
 
 public class Test {
+	public static class MainLooper implements Executor {
+		private boolean mStop = false;
+		private Deque<Runnable> mQueue = new ConcurrentLinkedDeque<>();
+		
+		public void stop() {
+			mStop = true;
+		}
+		
+		public void run() {
+			while (!mStop) {
+				
+				Runnable r = mQueue.pollLast();				
+				if (r == null) {
+					try {
+						Thread.sleep(10);
+					} catch (InterruptedException e) {}
+				} else {
+					r.run();
+				}
+			}
+		}
+
+		@Override
+		public void execute(Runnable command) {
+			mQueue.add(command);
+		}
+	}
+	
 	
 	public static void main(String[] args) {
-		System.out.println("init"); 
+		System.out.println("init");
+		MainLooper looper = new MainLooper();
+		Promise.setMainExecutor(looper);
 		
-		final boolean[] done = new boolean[] {false};	
+		Promise.resolve(5).then( (Integer i) -> {
+			String s = Integer.toString(i);
+			System.out.println("Integer: " + s);
+			return s;
+		});
 
 		Promise.resolve(1)
 		.then( (Integer i) -> Integer.toString(i) )
 		.then( (String s) -> s + "" )
 		.then( (String s) -> Tuple.make(1,2,s) )
-		.then( (Integer a, Integer b, String c) -> "" )
-		.thenAsync( (String s) -> s.split(".") )
-		.thenOnMain( (String[] s) -> Integer.parseInt(s[0]) )
+		.then( (Integer a, Integer b, String c) -> a + "." + b + "." + c )
+		.thenAsync( (String s) -> s.split("\\.") )
+		.thenOnMain( (String[] s) -> {
+			Integer i = Integer.parseInt(s[0]);
+			System.out.println("Done!!!");
+			return i;
+		})
 		.fail( (Throwable t) -> {
 			System.out.println("Error: " + t);
 		});
 		
-		Promise.resolve( (Void) -> 5 )
+		Promise.resolve().then( (Void v) -> 5 )
 		.then( (Integer i) -> {
-			if (i > 0) throw new RuntimeException("ouch!");
+//			if (i > 0) throw new RuntimeException("ouch!");
 			return i+3;
 		})
 		.then( (Integer i) -> Tuple.make(i,2) )
 		.then( (Integer a, Integer b) -> Integer.toString(a*b) )
-		.then( (String s) -> Promise.async(s, (String v) -> {
-			Thread.sleep(2000);
-			return ":) " + v;
-		}))
-		.then( (String s ) -> s + " :(")
-		.then(new PromiseHandler<Void,String>() {
+		.then( (String s) -> {
+			return Promise.resolve(s)
+					.thenAsync( (String v) -> {
+				Thread.sleep(2000);
+				return ":) " + v;
+			});
+		})
+		.then( (String s) ->  s + " :(" )
+		.then(new Handler<Void,String>() {
 			@Override
-			public Promise<Void> resolve(String in) throws Exception {
+			public Void resolve(String in) throws Exception {
 				System.out.println("finished!");
 				return null;
 			}
@@ -50,7 +98,7 @@ public class Test {
 			
 			@Override
 			public void always() {
-				done[0] = true;
+				looper.stop();
 			}
 		});
 		
@@ -65,13 +113,7 @@ public class Test {
 		});
 
 		System.out.println("promise created!");
-
-		while (!done[0]) {
-			try {
-				Thread.sleep(10);
-			} catch (InterruptedException e) {}
-		}	
-		
+		looper.run();		
 		System.out.println("Exiting...");
 	}
 }

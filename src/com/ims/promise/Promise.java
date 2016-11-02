@@ -47,6 +47,14 @@ public class Promise<OUT> {
 	}
 	
 	/**
+	 * @author bghoward
+	 *
+	 */
+	public static interface IPromiseResolve<OUT,IN> extends IResolve<Promise<OUT>,IN> {
+		public Promise<OUT> resolve(IN in) throws Exception;
+	}
+	
+	/**
 	 * 
 	 * @author bghoward
 	 *
@@ -66,7 +74,7 @@ public class Promise<OUT> {
 	 * @param <OUT>
 	 * @param <IN>
 	 */
-	public static abstract class PromiseHandler<OUT,IN> extends Handler<Promise<OUT>,IN> {
+	public static abstract class PromiseHandler<OUT,IN> extends Handler<Promise<OUT>,IN> implements IPromiseResolve<OUT,IN> {
 		public abstract Promise<OUT> resolve(IN in) throws Exception;
 	}
 	
@@ -154,41 +162,6 @@ public class Promise<OUT> {
 		void run(IDeferred<IN> resolve);
 	}
 
-	/**
-	 * @author bghoward
-	 *
-	 * @param <OUT>
-	 */
-	private static class ThreadContinuationProxy<OUT> implements IInComponent<OUT>, Runnable {
-		final IInComponent<OUT> mFwd;
-		Result<OUT> mResult;
-		Executor mExecutor;
-		
-		ThreadContinuationProxy( IInComponent<OUT> fwd, Executor exe ) {
-			mFwd = fwd;
-			mExecutor = exe;
-		}
-
-		@Override
-		public void run() {
-			assert(mResult != null);
-			mFwd.resolve(mResult);
-		}
-
-		@Override
-		public void resolve(Result<OUT> result) {
-			
-			// error occurred send it along, no need to spawn on another thread
-			if (result.error != null) {
-				mFwd.resolve(result);
-				return;
-			}
-
-			// process the results in a background thread...
-			mResult = result; // assign the results	
-			mExecutor.execute(this);
-		}
-	};
 
 	/**
 	 * @author bghoward
@@ -228,60 +201,49 @@ public class Promise<OUT> {
 	 * @param <OUT>
 	 * @param <IN>
 	 */
-	private static class Continuation<OUT,IN> implements IOutComponent<OUT>, IInComponent<IN> {
+	private static abstract class BaseContinuation<OUT,IN> implements IOutComponent<OUT>, IInComponent<IN> {
 
 		private List< IInComponent<OUT> > mChildren;
 		private Result<OUT> mResult;
-		private final Handler<OUT,IN> mCallback;
+		private final Executor mExecutor;
 		
-		protected Continuation(Result<OUT> res) {
-			assert(res != null);
-			mCallback = null;
-			mResult = res;
-		}
-		
-		protected Continuation( Handler<OUT,IN> cb ) {
-			mCallback = cb;
+		protected BaseContinuation(Executor exe) {
+			mExecutor = exe;
 		}
 		
 		@Override
 		public void resolve( Result<IN> result ) {
 			if (result.error != null) {
 				reject(result.error);
-			} else {
-				resolve(result.out);
+				return;
 			}
-			mCallback.always();
+
+			if (mExecutor == null) {
+				resolve(result.out);
+				return;
+			}
+
+			mExecutor.execute(new Runnable() {					
+				@Override
+				public void run() {
+					resolve(result.out);
+				}
+			});
 		}
 		
-		private void resolve(IN in) {
-			Result<OUT> result;
-			try {
-				OUT out = mCallback.resolve(in);
-				result = new Result<OUT>(out, null);
-			} catch (Exception e) {
-				result = new Result<OUT>(null, e);
-			}			
-			setResult(result);
-		}
+		protected abstract void resolve(IN in);
+		protected abstract void reject(Throwable t);
 		
-		private void reject(Throwable t) {
-			try {
-				mCallback.reject(t);
-			} catch(Exception e) {}
-			setResult(new Result<OUT>(null, t));
-		}
-		
-		private void setResult(Result<OUT> result) {
+		protected void dispatchResult(Result<OUT> result) {
+
 			List< IInComponent<OUT> > children = null;
 			synchronized (this) {
 				mResult = result;
 				children = mChildren;
 				mChildren = null;
-			}
-			
+			}			
 			if (children == null) return;
-			
+
 			for (IInComponent<OUT> child : children) {
 				child.resolve(result);
 			}
@@ -306,6 +268,104 @@ public class Promise<OUT> {
 			// this promise has already been resolved, go ahead and process the results!
 			if (result != null) child.resolve(result);
 		}		
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	private static class ResolvedContinuation<T> extends BaseContinuation<T,T> {
+		protected ResolvedContinuation(T res) {
+			super(null);
+			assert(res != null);
+			super.mResult = new Result<T>(res, null);
+		}
+		
+		@Override
+		protected void resolve(T in) {
+			dispatchResult(new Result<T>(in,null));
+		}
+
+		@Override
+		protected void reject(Throwable t) {
+			dispatchResult(new Result<T>(null, t));
+		}
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	private static class DeferredContinuation<T> extends BaseContinuation<T,T> {
+		
+		protected DeferredContinuation( Deferrable<T> d, Executor exe ) {
+			super(exe);
+			d.run(new IDeferred<T>() {
+				@Override
+				public void resolve(T in) {
+					DeferredContinuation.this.resolve(new Result<T>(in,null));
+				}
+
+				@Override
+				public void reject(Throwable e) {
+					DeferredContinuation.this.resolve(new Result<T>(null,e));
+				}
+			});
+		}
+		
+		@Override
+		protected void resolve(T in) {
+			dispatchResult(new Result<T>(in, null));
+		}
+
+		@Override
+		protected void reject(Throwable t) {
+			dispatchResult(new Result<T>(null, t));
+		}
+	}
+
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 * @param <IN>
+	 */
+	private static class CallbackContinuation<OUT,IN> extends BaseContinuation<OUT,IN> {
+
+		private final Handler<OUT,IN> mCallback;
+		
+		protected CallbackContinuation( Handler<OUT,IN> cb, Executor exe) {
+			super(exe);
+			assert(cb != null);
+			mCallback = cb;
+		}
+		
+		@Override
+		protected void resolve(IN in) {
+			Result<OUT> result;
+			try {				
+				OUT out = mCallback.resolve(in);
+				result = new Result<OUT>(out, null);
+			} catch (Exception e) {
+				result = new Result<OUT>(null, e);
+			}
+			dispatchResult(result);
+			mCallback.always();
+		}
+
+		@Override
+		protected void reject(Throwable t) {
+			try {
+				mCallback.reject(t);
+			} catch(Exception e) {}
+			
+			dispatchResult(new Result<OUT>(null, t));
+			mCallback.always();
+		}
 	}
 
 	private static Executor gMain;
@@ -407,248 +467,47 @@ public class Promise<OUT> {
 		
 		return Promise.make(new PromiseList());
 	}
-	
-	/**
-	 * @param in
-	 * @param func
-	 * @return
-	 */
-	public static <IN,OUT> Promise<OUT> main(final IN in, Handler<OUT,IN> cb) {
-		return resolve(in, cb, getMain());
-	}
-
-	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> main(Handler<OUT,Void> cb) {
-		return resolve(null, cb, getMain());
-	}
-	
-	/**
-	 * @param in
-	 * @param func
-	 * @return
-	 */
-	public static <IN,OUT> Promise<OUT> main(final IN in, IResolve<OUT,IN> cb) {
-		return resolve(in, cb, getMain());
-	}
-
-	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> main(IResolve<OUT,Void> cb) {
-		return resolve(null, cb, getMain());
-	}
-	
-	/**
-	 * @param in
-	 * @param func
-	 * @return
-	 */
-	public static <IN,OUT> Promise<OUT> async(final IN in, IResolve<OUT,IN> cb) {
-		return resolve(in, cb, getBG());
-	}
-
-	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> async(IResolve<OUT,Void> cb) {
-		return resolve(null, cb, getBG());
-	}
-	
-	/**
-	 * @param in
-	 * @param func
-	 * @return
-	 */
-	public static <IN,OUT> Promise<OUT> async(final IN in, Handler<OUT,IN> cb) {
-		return resolve(in, cb, getBG());
-	}
-
-	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> async(Handler<OUT,Void> cb) {
-		return resolve(null, cb, getBG());
-	}
-
-	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> resolve(IResolve<OUT,Void> cb) {
-		return resolve(null, cb, null);
-	}
-	
-	/**
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT> Promise<OUT> resolve(Handler<OUT,Void> cb) {
-		return resolve(null, cb, null);
-	}
-	
-	/**
-	 * @param in
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT,IN> Promise<OUT> resolve(IN in, IResolve<OUT,IN> cb) {
-		return resolve(in, cb, null);
-	}
-
-	/**
-	 * @param in
-	 * @param cb
-	 * @return
-	 */
-	public static <OUT,IN> Promise<OUT> resolve(IN in, Handler<OUT,IN> cb) {
-		return resolve(in, cb, null);
-	}
-	
-	/**
-	 * 
-	 * @param in
-	 * @param cb
-	 * @param exe
-	 * @return
-	 */
-	public static <OUT,IN> Promise<OUT> resolve(IN in, IResolve<OUT,IN> cb, Executor exe) {
-		return resolve(in, new Handler<OUT, IN>() {
-			@Override
-			public OUT resolve(IN in) throws Exception {
-				return cb.resolve(in);
-			}
-		}, exe);
-	}
-	
-	/**
-	 * 
-	 * @param in
-	 * @param cb
-	 * @param exe
-	 * @return
-	 */
-	public static <OUT,IN> Promise<OUT> resolve(IN in, Handler<OUT,IN> cb, Executor exe) {
-		final Continuation<OUT,IN> cont = new Continuation<>(cb);
-		if (exe != null) {
-			ThreadContinuationProxy<IN> proxy = new ThreadContinuationProxy<>(cont, exe);
-			proxy.resolve(new Result<>(in, null));
-		} else {
-			cont.resolve(new Result<>(in, null));
-		}
-		return new Promise<>(cont);
-	}
 
 	/**
 	 * @param in
 	 * @return
 	 */
 	public static <IN> Promise<IN> resolve( IN in ) {
-		// resolve immediately
-		Result<IN> res = new Result<>(in, null);
-		return new Promise<>(new Continuation<IN,IN>(res));
+		return new Promise<>(new ResolvedContinuation<IN>(in));
+	}
+	
+	/**
+	 * 
+	 * @return
+	 */
+	public static Promise<Void> resolve() {
+		Void v = null;
+		return resolve(v);
 	}
 	
 	/**
 	 * @param cb
 	 * @return
 	 */
-	public static <OUT> Promise<OUT> make( Deferrable<OUT> cb ) {
-		final Continuation<OUT, OUT> cont = new Continuation<>(new Handler<OUT,OUT>() {
-			@Override
-			public OUT resolve(OUT in) {
-				return in;
-			}
-		});
-		
-		// wait for the callback to complete then forward the results to our continuation
-		cb.run(new IDeferred<OUT>() {
-			@Override
-			public void resolve(OUT in) {
-				// success!!
-				cont.resolve(new Result<OUT>(in,null));
-			}
-
-			@Override
-			public void reject(Throwable t) {
-				// failure!!
-				cont.resolve(new Result<OUT>(null,t));
-			}
-		});
-		return new Promise<>(cont);
+	public static <OUT> Promise<OUT> make( Deferrable<OUT> def, Executor exe ) {
+		return new Promise<>(new DeferredContinuation<>(def, exe));
 	}
 	
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> make( Deferrable<OUT> def ) {
+		return make(def, null);
+	}
 	
 	/**
 	 * @param func
 	 * @return
 	 */
-	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> func ) {
-		// This is a special case of a promise returning another promise
-		
-		// We create a promise "proxy" that will wait for the promise of the promise to be resolved then forward the
-		// results
-		final Handler<Promise<RT>,OUT> base = func;
-		return Promise.make(new Deferrable<RT>() {
-			@Override
-			public void run(final IDeferred<RT> promise) {
-				
-				// call the outer promise and wait for the promised result
-				Promise.this.then(base).then(new Handler<Void,Promise<RT>>() {
-					@Override
-					public Void resolve(Promise<RT> in) {
-						
-						// now we call the inner promise and forward the results
-						in.then(new Handler<Void,RT>() {
-							@Override
-							public Void resolve(RT in) {
-								promise.resolve(in);
-								return null;
-							}	
-							
-							@Override
-							public void reject(Throwable t) {
-								promise.reject(t);
-							}
-							
-							@Override
-							public void always() {}
-						});
-						return null;
-					}
-					
-					@Override
-					public void reject(Throwable t) {
-						promise.reject(t);
-					}
-					
-					@Override
-					public void always() {}
-				});				
-			}
-		});
+	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> handler ) {
+		return then(handler, null);
 	}
-	
-	/**
-	 * 
-	 * @param handler
-	 * @param exe
-	 * @return
-	 */
-	public <RT> Promise<RT> then( final Handler<RT, OUT> handler, Executor exe ) {
-		final Continuation<RT,OUT> cont = new Continuation<>(handler);
-		if (exe != null) {
-			mOut.addChild(new ThreadContinuationProxy<OUT>(cont, exe));
-		} else {
-			mOut.addChild(cont);
-		}
-		return new Promise<>(cont);
-	}	
 	
 	/**
 	 * 
@@ -669,22 +528,6 @@ public class Promise<OUT> {
 	public <RT> Promise<RT> then( final Handler<RT,OUT> cb ) {
 		return this.then(cb, null);
 	}
-
-	/**
-	 * @param func
-	 * @return
-	 */
-	public <RT> Promise<RT> thenAsync( final Handler<RT,OUT> func ) {
-		return then(func, getBG());
-	}
-	
-	/**
-	 * @param func
-	 * @return
-	 */
-	public <RT> Promise<RT> thenOnMain( final Handler<RT,OUT> func ) {
-		return then(func, getMain());
-	}
 	
 	/**
 	 * @param cb
@@ -694,6 +537,99 @@ public class Promise<OUT> {
 		return this.then(cb, null);
 	}
 
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final IPromiseResolve<RT,OUT> cb ) {
+		return this.then(cb, null);
+	}
+	
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final IPromiseResolve<RT,OUT> cb, Executor exe ) {
+		return this.then( new PromiseHandler<RT, OUT>() {
+			@Override
+			public Promise<RT> resolve(OUT in) throws Exception {
+				return cb.resolve(in);
+			}
+		});
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> handler, Executor exe ) {
+		// This is a special case of a promise returning another promise
+		
+		// We create a promise "proxy" that will wait for the promise of the promise to be resolved then forward the
+		// results
+		final Promise<Promise<RT>> inner = this.then((Handler<Promise<RT>,OUT>)handler);
+		
+		return Promise.make(new Deferrable<RT>() {
+			@Override
+			public void run(final IDeferred<RT> promise) {
+				
+				// call the outer promise and wait for the promised result
+				inner.then(new Handler<Void,Promise<RT>>() {
+
+					@Override
+					public Void resolve(Promise<RT> in) {
+						
+						// now we call the inner promise and forward the results
+						in.then(new Handler<Void,RT>() {
+							@Override
+							public Void resolve(RT in) {
+								promise.resolve(in);
+								return null;
+							}	
+							
+							@Override
+							public void reject(Throwable t) {
+								promise.reject(t);
+							}
+							
+							@Override
+							public void always() {}
+						}, exe);
+						return null;
+					}
+					
+					@Override
+					public void reject(Throwable t) {
+						promise.reject(t);
+					}
+					
+					@Override
+					public void always() {}
+				}, exe);				
+			}
+		}, exe);
+	}
+	
+	/**
+	 * 
+	 * @param handler
+	 * @param exe
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final Handler<RT, OUT> handler, Executor exe ) {
+		CallbackContinuation<RT,OUT> child = new CallbackContinuation<>(handler, exe);
+		mOut.addChild(child);
+		return new Promise<>(child);
+	}
+
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenAsync( final IPromiseResolve<RT,OUT> cb ) {
+		return then(cb, getBG());
+	}
+	
 	/**
 	 * @param func
 	 * @return
@@ -706,8 +642,48 @@ public class Promise<OUT> {
 	 * @param func
 	 * @return
 	 */
+	public <RT> Promise<RT> thenAsync( final Handler<RT,OUT> cb ) {
+		return then(cb, getBG());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenAsync( final PromiseHandler<RT,OUT> cb ) {
+		return then(cb, getBG());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenOnMain( final PromiseHandler<RT,OUT> cb ) {
+		return then(cb, getMain());
+	}	
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenOnMain( final IPromiseResolve<RT,OUT> cb ) {
+		return then(cb, getMain());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
 	public <RT> Promise<RT> thenOnMain( final IResolve<RT,OUT> func ) {
 		return then(func, getMain());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenOnMain( final Handler<RT,OUT> cb ) {
+		return then(cb, getMain());
 	}
 
 	/**
