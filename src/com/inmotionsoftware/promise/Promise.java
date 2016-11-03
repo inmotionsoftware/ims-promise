@@ -281,20 +281,20 @@ public class Promise<OUT> {
 	 * @param <IN>
 	 */
 	private static class ResolvedContinuation<T> extends BaseContinuation<T,T> {
-		protected ResolvedContinuation(T res) {
+		protected ResolvedContinuation(T res, Throwable t) {
 			super(null);
 			assert(res != null);
-			super.mResult = new Result<T>(res, null);
+			super.mResult = new Result<T>(res, t);
 		}
 		
 		@Override
 		protected void resolve(T in) {
-			dispatchResult(new Result<T>(in,null));
+			dispatchResult(super.mResult);
 		}
 
 		@Override
 		protected void reject(Throwable t) {
-			dispatchResult(new Result<T>(null, t));
+			dispatchResult(super.mResult);
 		}
 	}
 	
@@ -477,7 +477,7 @@ public class Promise<OUT> {
 	 * @return
 	 */
 	public static <IN> Promise<IN> resolve( IN in ) {
-		return new Promise<>(new ResolvedContinuation<IN>(in));
+		return new Promise<>(new ResolvedContinuation<IN>(in, null));
 	}
 	
 	/**
@@ -487,6 +487,26 @@ public class Promise<OUT> {
 	public static Promise<Void> resolve() {
 		Void v = null;
 		return resolve(v);
+	}
+	
+	public static <T> Promise<T> reject(Throwable t) {
+		return new Promise<T>(new ResolvedContinuation<T>(null, t));
+	}
+	
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> makeAsync( Deferrable<OUT> def) {
+		return make(def, getBG());
+	}
+	
+	/**
+	 * @param cb
+	 * @return
+	 */
+	public static <OUT> Promise<OUT> makeOnMain( Deferrable<OUT> def) {
+		return make(def, getMain());
 	}
 	
 	/**
@@ -554,12 +574,12 @@ public class Promise<OUT> {
 	 * @return
 	 */
 	public <RT> Promise<RT> then( final IPromiseResolve<RT,OUT> cb, Executor exe ) {
-		return this.then( new PromiseHandler<RT, OUT>() {
+		return this.then(new PromiseHandler<RT, OUT>() {
 			@Override
 			public Promise<RT> resolve(OUT in) throws Exception {
 				return cb.resolve(in);
 			}
-		});
+		}, exe);
 	}
 	
 	/**

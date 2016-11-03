@@ -2,44 +2,86 @@ package com.inmotionsoftware.promise.Test;
 
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import com.inmotionsoftware.promise.Promise;
+import com.inmotionsoftware.promise.Promise.Deferrable;
 import com.inmotionsoftware.promise.Promise.Handler;
 import com.inmotionsoftware.promise.Promise.IDeferred;
+import com.inmotionsoftware.promise.util.MainLooper;
 import com.inmotionsoftware.tuple.Tuple;
 
 public class Test {
-	public static class MainLooper implements Executor {
-		private boolean mStop = false;
-		private Deque<Runnable> mQueue = new ConcurrentLinkedDeque<>();
-		
-		public void stop() {
-			mStop = true;
-		}
-		
-		public void run() {
-			while (!mStop) {
-				
-				Runnable r = mQueue.pollLast();				
-				if (r == null) {
-					try {
-						Thread.sleep(10);
-					} catch (InterruptedException e) {}
-				} else {
-					r.run();
-				}
-			}
-		}
+	public class MyDeferred implements Deferrable<String> {
 
 		@Override
-		public void execute(Runnable command) {
-			mQueue.add(command);
-		}
+		public void run(IDeferred<String> resolve) {
+
+		}		
+	}
+	
+	public static void testAsync() {
+		final Thread main = Thread.currentThread(); 
+		
+		Promise.makeAsync((IDeferred<String> deferred) -> {
+			assert(!Thread.currentThread().equals(main));
+		});
+
+		Promise.resolve(123).thenAsync( (Integer i) -> {
+			assert(!Thread.currentThread().equals(main));
+			return null;
+		});		
+	}
+	
+	public static void testReject() {
+
+		Promise.reject(new RuntimeException("blah"))
+		.then( new Handler<Void,Object>() {
+			private boolean suc = false;
+			
+			public Void resolve(Object in) throws Exception {
+				suc = true;
+				assert(false);
+				return null; 
+			}
+			
+			public void always() {
+				assert(!suc);
+			}
+			
+			@Override
+			public void reject(Throwable t) {
+				suc = false;
+			}
+		} );
 	}
 	
 	
 	public static void main(String[] args) {
+		
+		testAsync();
+		testReject();
+		
+//		long keepAlive = 10;
+//		int min = 1;
+//		int max = 4;
+//		ThreadPoolExecutor exec = new ThreadPoolExecutor(min, max, keepAlive, TimeUnit.MINUTES, new LinkedBlockingQueue<>());
+//		Promise<String> p =  Promise.make(new MyDeferred(), exec);
+//		
+//		
+//		Promise.make( (IDeferred<String> deferred) -> {
+//			new Thread(() -> {
+//				try {
+//					String res = doSomething();
+//					deferred.resolve(res);
+//				} catch (Exception e) {
+//					deferred.reject(e);
+//				}
+//			}).start();
+//		});
+		
+
+		
 		System.out.println("init");
 		MainLooper looper = new MainLooper();
 		Promise.setMainExecutor(looper);
