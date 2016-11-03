@@ -1,4 +1,4 @@
-package com.ims.promise;
+package com.inmotionsoftware.promise;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,11 +9,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.ims.tuple.Pair;
-import com.ims.tuple.Quartet;
-import com.ims.tuple.Quintet;
-import com.ims.tuple.Triplet;
-import com.ims.tuple.Unary;
+import com.inmotionsoftware.tuple.Pair;
+import com.inmotionsoftware.tuple.Quartet;
+import com.inmotionsoftware.tuple.Quintet;
+import com.inmotionsoftware.tuple.Triplet;
 
 /**
  * @author bghoward
@@ -51,6 +50,7 @@ public class Promise<OUT> {
 	 *
 	 */
 	public static interface IPromiseResolve<OUT,IN> extends IResolve<Promise<OUT>,IN> {
+		@Override
 		public Promise<OUT> resolve(IN in) throws Exception;
 	}
 	
@@ -62,8 +62,11 @@ public class Promise<OUT> {
 	 * @param <IN>
 	 */
 	public static abstract class Handler<OUT,IN> implements IResolve<OUT,IN>, IReject, IAlways {
+		@Override
 		public OUT resolve(IN in) throws Exception { return null; }
+		@Override
 		public void always() {}
+		@Override
 		public void reject(Throwable t) {}
 	}
 	
@@ -75,6 +78,7 @@ public class Promise<OUT> {
 	 * @param <IN>
 	 */
 	public static abstract class PromiseHandler<OUT,IN> extends Handler<Promise<OUT>,IN> implements IPromiseResolve<OUT,IN> {
+		@Override
 		public abstract Promise<OUT> resolve(IN in) throws Exception;
 	}
 	
@@ -567,7 +571,7 @@ public class Promise<OUT> {
 		
 		// We create a promise "proxy" that will wait for the promise of the promise to be resolved then forward the
 		// results
-		final Promise<Promise<RT>> inner = this.then((Handler<Promise<RT>,OUT>)handler);
+		final Promise<Promise<RT>> inner = this.then((Handler<Promise<RT>,OUT>)handler, exe);
 		
 		return Promise.make(new Deferrable<RT>() {
 			@Override
@@ -605,7 +609,7 @@ public class Promise<OUT> {
 					
 					@Override
 					public void always() {}
-				}, exe);				
+				});				
 			}
 		}, exe);
 	}
@@ -708,20 +712,20 @@ public class Promise<OUT> {
 		});
 	}
 	
-	/**
-	 * 
-	 * @param cb
-	 * @return
-	 */
-	@SuppressWarnings("unchecked")
-	public <RT,A> Promise<RT> then( final IUnaryCallback<RT,A> cb ) {
-		return this.then((Handler<RT,OUT>) new Handler<RT, Unary<A>>() {
-			@Override
-			public RT resolve(Unary<A> in) throws Exception {
-				return cb.resolve(in.get0());
-			}
-		}, null);
-	}
+//	/**
+//	 * 
+//	 * @param cb
+//	 * @return
+//	 */
+//	@SuppressWarnings("unchecked")
+//	public <RT,A> Promise<RT> then( final IUnaryCallback<RT,A> cb ) {
+//		return this.then((Handler<RT,OUT>) new Handler<RT, Unary<A>>() {
+//			@Override
+//			public RT resolve(Unary<A> in) throws Exception {
+//				return cb.resolve(in.get0());
+//			}
+//		}, null);
+//	}
 	
 	/**
 	 * 

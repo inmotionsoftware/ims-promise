@@ -1,4 +1,4 @@
-package com.ims.tuple;
+package com.inmotionsoftware.tuple;
 
 import java.util.ArrayList;
 import java.util.Collection;

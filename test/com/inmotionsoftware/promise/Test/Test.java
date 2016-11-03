@@ -1,17 +1,13 @@
-package com.ims.promise.Test;
+package com.inmotionsoftware.promise.Test;
 
-import java.util.ArrayList;
 import java.util.Deque;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executor;
 
-import com.ims.promise.Promise;
-import com.ims.promise.Promise.Handler;
-import com.ims.promise.Promise.IDeferred;
-import com.ims.promise.Promise.IResolve;
-import com.ims.promise.Promise.PromiseHandler;
-import com.ims.tuple.Tuple;
+import com.inmotionsoftware.promise.Promise;
+import com.inmotionsoftware.promise.Promise.Handler;
+import com.inmotionsoftware.promise.Promise.IDeferred;
+import com.inmotionsoftware.tuple.Tuple;
 
 public class Test {
 	public static class MainLooper implements Executor {
