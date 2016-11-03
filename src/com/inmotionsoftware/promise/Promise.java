@@ -21,6 +21,8 @@ import com.inmotionsoftware.tuple.Triplet;
  */
 public class Promise<OUT> {
 	
+	public static final String VERSION = "0.1.0"; 
+	
 	/**
 	 * @author bghoward
 	 *
