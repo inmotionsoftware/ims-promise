@@ -1,6 +1,7 @@
 package com.inmotionsoftware.promise;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
@@ -13,6 +14,7 @@ import com.inmotionsoftware.tuple.Pair;
 import com.inmotionsoftware.tuple.Quartet;
 import com.inmotionsoftware.tuple.Quintet;
 import com.inmotionsoftware.tuple.Triplet;
+import com.inmotionsoftware.tuple.Unary;
 
 /**
  * @author bghoward
@@ -21,7 +23,7 @@ import com.inmotionsoftware.tuple.Triplet;
  */
 public class Promise<OUT> {
 	
-	public static final String VERSION = "0.1.0"; 
+	public static final String VERSION = "0.1.1"; 
 	
 	/**
 	 * @author bghoward
@@ -50,6 +52,32 @@ public class Promise<OUT> {
 	/**
 	 * @author bghoward
 	 *
+	 * @param <IN>
+	 */
+	public static interface VoidResolve<IN> {
+		public abstract void resolve(IN in) throws Exception;
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 * @param <OUT>
+	 */
+	public static interface ResolveVoid<OUT> {
+		public abstract OUT resolve() throws Exception;
+	}
+	
+	/**
+	 * @author bghoward
+	 *
+	 */
+	public static interface VoidResolveVoid {
+		public abstract void resolve() throws Exception;
+	}
+	
+	/**
+	 * @author bghoward
+	 *
 	 */
 	public static interface IPromiseResolve<OUT,IN> extends IResolve<Promise<OUT>,IN> {
 		@Override
@@ -65,7 +93,7 @@ public class Promise<OUT> {
 	 */
 	public static abstract class Handler<OUT,IN> implements IResolve<OUT,IN>, IReject, IAlways {
 		@Override
-		public OUT resolve(IN in) throws Exception { return null; }
+		public abstract OUT resolve(IN in) throws Exception;
 		@Override
 		public void always() {}
 		@Override
@@ -165,7 +193,7 @@ public class Promise<OUT> {
 	 * @param <IN>
 	 */
 	public static interface Deferrable<IN> {
-		void run(IDeferred<IN> resolve);
+		void run(IDeferred<IN> resolve) throws Exception;
 	}
 
 
@@ -219,22 +247,24 @@ public class Promise<OUT> {
 		
 		@Override
 		public void resolve( Result<IN> result ) {
-			if (result.error != null) {
-				reject(result.error);
-				return;
-			}
-
-			if (mExecutor == null) {
-				resolve(result.out);
-				return;
-			}
-
-			mExecutor.execute(new Runnable() {					
+			runWithExecutor(new Runnable() {
 				@Override
 				public void run() {
-					resolve(result.out);
+					if (result.error != null) {
+						reject(result.error);
+					} else {
+						resolve(result.out);	
+					}
 				}
 			});
+		}
+		
+		protected void runWithExecutor(Runnable r) {
+			if (mExecutor != null) {
+				mExecutor.execute(r);
+			} else {
+				r.run();
+			}
 		}
 		
 		protected abstract void resolve(IN in);
@@ -308,19 +338,38 @@ public class Promise<OUT> {
 	 */
 	private static class DeferredContinuation<T> extends BaseContinuation<T,T> {
 		
+		private final Deferrable<T> mDeferrable;
+		
 		protected DeferredContinuation( Deferrable<T> d, Executor exe ) {
 			super(exe);
-			d.run(new IDeferred<T>() {
-				@Override
-				public void resolve(T in) {
-					DeferredContinuation.this.resolve(new Result<T>(in,null));
-				}
+			mDeferrable = d;
+		}
 
+		public void start() {
+			runWithExecutor(new Runnable() {
 				@Override
-				public void reject(Throwable e) {
-					DeferredContinuation.this.resolve(new Result<T>(null,e));
+				public void run() {
+					dispatch();
 				}
 			});
+		}
+
+		private void dispatch() {
+			try {
+				mDeferrable.run(new IDeferred<T>() {
+					@Override
+					public void resolve(T in) {
+						DeferredContinuation.this.resolve(in);
+					}
+	
+					@Override
+					public void reject(Throwable e) {
+						DeferredContinuation.this.reject(e);
+					}
+				});				
+			} catch (Exception e) {
+				resolve(new Result<T>(null, e));
+			}
 		}
 		
 		@Override
@@ -421,6 +470,12 @@ public class Promise<OUT> {
 	private Promise(IOutComponent<OUT> out) {
 		mOut = out;
 	}
+
+//	
+//	public static<T> Promise<List<T>> all(final Collection<Promise<T>> col) {
+//		Iterable<Promise<T>> it = (Iterable<Promise<T>>)col;
+//		return all(it);
+//	}
 	
 	/**
 	 * @param iter
@@ -429,8 +484,10 @@ public class Promise<OUT> {
 	public static<T> Promise<List<T>> all(final Iterable<Promise<T>> iter) {
 		
 		class PromiseList extends Handler<Void,T> implements Deferrable<List<T>> {
-			private List<T> list = new ArrayList<>();
-			private AtomicInteger counter = new AtomicInteger(0);
+			private final List<T> mSuccesses = new ArrayList<>();
+			private final List<Throwable> mFailures = new ArrayList<>();
+			
+			private AtomicInteger mCount = new AtomicInteger(0);
 			private IDeferred<List<T>> mResolve;
 			
 			@Override
@@ -445,12 +502,19 @@ public class Promise<OUT> {
 			}
 			
 			public void increment() {
-				counter.incrementAndGet();
+				mCount.incrementAndGet();
 			}
 			
 			public void decrement() {
-				if (counter.decrementAndGet() == 0) {
-					mResolve.resolve(list);
+				if (mCount.decrementAndGet() == 0) complete();
+			}
+			
+			private void complete() {
+				if (mFailures.size() > 0) {
+					Throwable first = mFailures.get(0);
+					mResolve.reject(first);	
+				} else {
+					mResolve.resolve(mSuccesses);	
 				}
 			}
 			
@@ -461,14 +525,18 @@ public class Promise<OUT> {
 
 			@Override
 			public Void resolve(T in) {
-				synchronized (this) {
-					list.add(in);	
+				synchronized (mSuccesses) {
+					mSuccesses.add(in);
 				}
 				return null;
 			}
 
 			@Override
-			public void reject(Throwable t) {} // TODO: how to return errors?
+			public void reject(Throwable t) {
+				synchronized (mFailures) {
+					mFailures.add(t);
+				}
+			} 
 		};
 		
 		return Promise.make(new PromiseList());
@@ -491,6 +559,10 @@ public class Promise<OUT> {
 		return resolve(v);
 	}
 	
+	/**
+	 * @param t
+	 * @return
+	 */
 	public static <T> Promise<T> reject(Throwable t) {
 		return new Promise<T>(new ResolvedContinuation<T>(null, t));
 	}
@@ -516,7 +588,9 @@ public class Promise<OUT> {
 	 * @return
 	 */
 	public static <OUT> Promise<OUT> make( Deferrable<OUT> def, Executor exe ) {
-		return new Promise<>(new DeferredContinuation<>(def, exe));
+		DeferredContinuation<OUT> cont = new DeferredContinuation<>(def, exe);
+		cont.start();
+		return new Promise<>(cont);
 	}
 	
 	/**
@@ -540,13 +614,74 @@ public class Promise<OUT> {
 	 * @param handler
 	 * @return
 	 */
-	public <RT> Promise<RT> then(final IResolve<RT, OUT> handler, Executor exe ) {
+	public <RT> Promise<RT> then( final IResolve<RT, OUT> handler, Executor exe ) {
 		return this.then(new Handler<RT,OUT>() {
 			@Override
 			public RT resolve(OUT in) throws Exception { return handler.resolve(in); }
 		}, exe);
 	}
+	
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public Promise<Void> then( final VoidResolve<OUT> handler ) {
+		return this.then(handler, null);
+	}
+	
+	/**
+	 * @param handler
+	 * @param exe
+	 * @return
+	 */
+	public Promise<Void> then( final VoidResolve<OUT> handler, Executor exe ) {
+		return this.then(new Handler<Void,OUT>() {
+			@Override
+			public Void resolve(OUT in) throws Exception { handler.resolve(in); return null; }
+		}, exe);
+	}
 
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public Promise<Void> then( final VoidResolveVoid handler ) {
+		return then(handler, null);
+	}
+	
+	/**
+	 * @param handler
+	 * @param exe
+	 * @return
+	 */
+	public Promise<Void> then( final VoidResolveVoid handler, Executor exe ) {
+		return this.then(new Handler<Void,OUT>() {
+			@Override
+			public Void resolve(OUT in) throws Exception { handler.resolve(); return null; }
+		}, exe);
+	}
+	
+	
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final ResolveVoid<RT> handler ) {
+		return this.then(handler, null);
+	}
+
+	/**
+	 * @param handler
+	 * @param exe
+	 * @return
+	 */
+	public <RT> Promise<RT> then( final ResolveVoid<RT> handler, Executor exe ) {
+		return this.then(new Handler<RT,OUT>() {
+			@Override
+			public RT resolve(OUT in) throws Exception { return handler.resolve(); }
+		}, exe);
+	}
+	
 	/**
 	 * @param cb
 	 * @return
@@ -668,6 +803,30 @@ public class Promise<OUT> {
 	 * @param func
 	 * @return
 	 */
+	public Promise<Void> thenAsync( final VoidResolve<OUT> func ) {
+		return then(func, getBG());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenAsync( final ResolveVoid<RT> func ) {
+		return then(func, getBG());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public Promise<Void> thenAsync( final VoidResolveVoid func ) {
+		return then(func, getBG());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
 	public <RT> Promise<RT> thenAsync( final Handler<RT,OUT> cb ) {
 		return then(cb, getBG());
 	}
@@ -678,6 +837,30 @@ public class Promise<OUT> {
 	 */
 	public <RT> Promise<RT> thenAsync( final PromiseHandler<RT,OUT> cb ) {
 		return then(cb, getBG());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public Promise<Void> thenOnMain( final VoidResolve<OUT> func ) {
+		return then(func, getMain());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public <RT> Promise<RT> thenOnMain( final ResolveVoid<RT> func ) {
+		return then(func, getMain());
+	}
+	
+	/**
+	 * @param func
+	 * @return
+	 */
+	public Promise<Void> thenOnMain( final VoidResolveVoid func ) {
+		return then(func, getMain());
 	}
 	
 	/**
@@ -711,16 +894,57 @@ public class Promise<OUT> {
 	public <RT> Promise<RT> thenOnMain( final Handler<RT,OUT> cb ) {
 		return then(cb, getMain());
 	}
+	
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public Promise<Void> alwaysAsync(final IAlways handler) {
+		return this.then(new Handler<Void,OUT>() {
+			@Override
+			public Void resolve(OUT out) { return null; }
+			@Override
+			public void always() { handler.always(); }
+		}, getBG());
+	}
 
 	/**
 	 * @param handler
 	 * @return
 	 */
+	public Promise<Void> alwaysOnMain(final IAlways handler) {
+		return this.then(new Handler<Void,OUT>() {
+			@Override
+			public Void resolve(OUT out) { return null; }
+			@Override
+			public void always() { handler.always(); }
+		}, getMain());
+	}
+	
+	/**
+	 * @param handler
+	 * @return
+	 */
 	public Promise<Void> always(final IAlways handler) {
-		return this.then(new Handler<Void,OUT>() {			
+		return this.then(new Handler<Void,OUT>() {
+			@Override
+			public Void resolve(OUT out) { return null; }
 			@Override
 			public void always() { handler.always(); }
 		});
+	}
+
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public Promise<Void> failOnMain(final IReject handler) {
+		return this.then(new Handler<Void,OUT>() {
+			@Override
+			public Void resolve(OUT out) { return null; }
+			@Override
+			public void reject(Throwable t) { handler.reject(t); }
+		}, getMain());
 	}
 	
 	/**
@@ -730,24 +954,39 @@ public class Promise<OUT> {
 	public Promise<Void> fail(final IReject handler) {
 		return this.then(new Handler<Void,OUT>() {
 			@Override
+			public Void resolve(OUT out) { return null; }
+			@Override
 			public void reject(Throwable t) { handler.reject(t); }
 		});
 	}
 	
-//	/**
-//	 * 
-//	 * @param cb
-//	 * @return
-//	 */
-//	@SuppressWarnings("unchecked")
-//	public <RT,A> Promise<RT> then( final IUnaryCallback<RT,A> cb ) {
-//		return this.then((Handler<RT,OUT>) new Handler<RT, Unary<A>>() {
-//			@Override
-//			public RT resolve(Unary<A> in) throws Exception {
-//				return cb.resolve(in.get0());
-//			}
-//		}, null);
-//	}
+	/**
+	 * @param handler
+	 * @return
+	 */
+	public Promise<Void> failAsync(final IReject handler) {
+		return this.then(new Handler<Void,OUT>() {
+			@Override
+			public Void resolve(OUT out) { return null; }
+			@Override
+			public void reject(Throwable t) { handler.reject(t); }
+		}, getBG());
+	}
+	
+	/**
+	 * 
+	 * @param cb
+	 * @return
+	 */
+	@SuppressWarnings("unchecked")
+	public <RT,A> Promise<RT> then( final IUnaryCallback<RT,A> cb ) {
+		return this.then((Handler<RT,OUT>) new Handler<RT, Unary<A>>() {
+			@Override
+			public RT resolve(Unary<A> in) throws Exception {
+				return cb.resolve(in.get0());
+			}
+		}, null);
+	}
 	
 	/**
 	 * 

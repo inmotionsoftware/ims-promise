@@ -6,21 +6,17 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class MainLooper implements Executor {
-	private boolean mStop = false;
-	private final BlockingQueue<Runnable> mQueue = new LinkedBlockingQueue<>();
+	private volatile boolean mStop = false;
+	private final BlockingQueue<Runnable> mQueue = new LinkedBlockingQueue<>();	
+	Thread mThread = null;
 	
 	public void stop() {
 		mStop = true;
+
 	}
 	
 	public void run() {
-		while (!mStop) {				
-			try {
-				Runnable r = mQueue.take();
-				assert(r != null);
-				r.run();
-			} catch (InterruptedException e) {}
-		}
+		while (!mStop) poll(100, TimeUnit.MILLISECONDS);
 	}
 	
 	public void poll() {
@@ -28,7 +24,7 @@ public class MainLooper implements Executor {
 		// exhaust all items on the queue, then return
 		while (!mStop) {
 			Runnable r = mQueue.poll();
-			if (r == null) break;			
+			if (r == null) break;
 			r.run();
 		}
 	}
@@ -44,7 +40,9 @@ public class MainLooper implements Executor {
 				if (r == null) break;
 				
 				r.run();
-			} catch (InterruptedException e) {}			
+			} catch (InterruptedException e) {
+				break;
+			}			
 		}
 	}
 
