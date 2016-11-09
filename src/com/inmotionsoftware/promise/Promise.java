@@ -1,13 +1,13 @@
 package com.inmotionsoftware.promise;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.inmotionsoftware.tuple.Pair;
@@ -23,7 +23,7 @@ import com.inmotionsoftware.tuple.Unary;
  */
 public class Promise<OUT> {
 	
-	public static final String VERSION = "0.1.1"; 
+	public static final String VERSION = "0.1.2"; 
 	
 	/**
 	 * @author bghoward
@@ -98,6 +98,29 @@ public class Promise<OUT> {
 		public void always() {}
 		@Override
 		public void reject(Throwable t) {}
+	}
+	
+
+	/**
+	 * @author bghoward
+	 *
+	 * @param <IN>
+	 */
+	private static class FailHandler<IN> extends Handler<Void,IN> {
+		private final IReject mChild;
+		
+		public FailHandler(IReject child) {
+			assert(child != null);
+			mChild = child;
+		}
+		
+		@Override
+		public Void resolve(IN in) throws Exception { return null; }
+		
+		@Override
+		public void reject(Throwable t) {
+			mChild.reject(t);
+		}
 	}
 	
 	/**
@@ -211,6 +234,31 @@ public class Promise<OUT> {
 		}
 	}
 	
+	public static class AggregateResults<T> {
+		private final List<T> mSucceeded = new ArrayList<>();
+		private final List<Throwable> mFailed = new ArrayList<>();;
+		
+		public  void success(T suc) {
+			synchronized(mSucceeded) {
+				mSucceeded.add(suc);				
+			}
+		}
+		
+		public synchronized void failed(Throwable t) {
+			synchronized(mFailed) {
+				mFailed.add(t);
+			}
+		}
+		
+		public List<T> getSucceeded() {
+			return mSucceeded;
+		}
+		
+		public List<Throwable> getFailed() {
+			return mFailed;
+		}
+	}
+	
 	/**
 	 * @author bghoward
 	 *
@@ -315,7 +363,6 @@ public class Promise<OUT> {
 	private static class ResolvedContinuation<T> extends BaseContinuation<T,T> {
 		protected ResolvedContinuation(T res, Throwable t) {
 			super(null);
-			assert(res != null);
 			super.mResult = new Result<T>(res, t);
 		}
 		
@@ -368,7 +415,7 @@ public class Promise<OUT> {
 					}
 				});				
 			} catch (Exception e) {
-				resolve(new Result<T>(null, e));
+				DeferredContinuation.this.reject(e);
 			}
 		}
 		
@@ -414,11 +461,17 @@ public class Promise<OUT> {
 
 		@Override
 		protected void reject(Throwable t) {
-			try {
-				mCallback.reject(t);
-			} catch(Exception e) {}
 			
-			dispatchResult(new Result<OUT>(null, t));
+			Result<OUT> result = null;
+			if (mCallback instanceof FailHandler) {
+				result = new Result<OUT>(null, null);
+			} else {				
+				try {
+					mCallback.reject(t);
+				} catch(Exception e) {}				
+				result = new Result<OUT>(null, t);
+			}
+			dispatchResult(result);
 			mCallback.always();
 		}
 	}
@@ -470,28 +523,20 @@ public class Promise<OUT> {
 	private Promise(IOutComponent<OUT> out) {
 		mOut = out;
 	}
-
-//	
-//	public static<T> Promise<List<T>> all(final Collection<Promise<T>> col) {
-//		Iterable<Promise<T>> it = (Iterable<Promise<T>>)col;
-//		return all(it);
-//	}
 	
 	/**
 	 * @param iter
 	 * @return
 	 */
-	public static<T> Promise<List<T>> all(final Iterable<Promise<T>> iter) {
+	public static<T> Promise<AggregateResults<T>> all(final Iterable<Promise<T>> iter) {
 		
-		class PromiseList extends Handler<Void,T> implements Deferrable<List<T>> {
-			private final List<T> mSuccesses = new ArrayList<>();
-			private final List<Throwable> mFailures = new ArrayList<>();
+		class AllHandler extends Handler<Void,T> {
 			
+			private final AggregateResults<T> mResults = new AggregateResults<>();
 			private AtomicInteger mCount = new AtomicInteger(0);
-			private IDeferred<List<T>> mResolve;
-			
-			@Override
-			public void run(IDeferred<List<T>> resolve) {
+			private IDeferred<AggregateResults<T>> mResolve;						
+
+			private void attach(IDeferred<AggregateResults<T>> resolve) {				
 				mResolve = resolve;
 				increment();
 				for (Promise<T> promise : iter) {
@@ -506,16 +551,12 @@ public class Promise<OUT> {
 			}
 			
 			public void decrement() {
-				if (mCount.decrementAndGet() == 0) complete();
+				int count = mCount.decrementAndGet();
+				if (count == 0) complete();
 			}
 			
 			private void complete() {
-				if (mFailures.size() > 0) {
-					Throwable first = mFailures.get(0);
-					mResolve.reject(first);	
-				} else {
-					mResolve.resolve(mSuccesses);	
-				}
+				mResolve.resolve(mResults);
 			}
 			
 			@Override
@@ -525,21 +566,23 @@ public class Promise<OUT> {
 
 			@Override
 			public Void resolve(T in) {
-				synchronized (mSuccesses) {
-					mSuccesses.add(in);
-				}
+				mResults.success(in);
 				return null;
 			}
 
 			@Override
 			public void reject(Throwable t) {
-				synchronized (mFailures) {
-					mFailures.add(t);
-				}
+				mResults.failed(t);
 			} 
 		};
-		
-		return Promise.make(new PromiseList());
+
+		AllHandler all = new AllHandler();		
+		return Promise.make(new Deferrable<AggregateResults<T>>() {
+			@Override
+			public void run(IDeferred<AggregateResults<T>> resolve) throws Exception {
+				all.attach(resolve);
+			}
+		});
 	}
 
 	/**
@@ -939,12 +982,7 @@ public class Promise<OUT> {
 	 * @return
 	 */
 	public Promise<Void> failOnMain(final IReject handler) {
-		return this.then(new Handler<Void,OUT>() {
-			@Override
-			public Void resolve(OUT out) { return null; }
-			@Override
-			public void reject(Throwable t) { handler.reject(t); }
-		}, getMain());
+		return this.fail(handler, getMain());
 	}
 	
 	/**
@@ -952,12 +990,7 @@ public class Promise<OUT> {
 	 * @return
 	 */
 	public Promise<Void> fail(final IReject handler) {
-		return this.then(new Handler<Void,OUT>() {
-			@Override
-			public Void resolve(OUT out) { return null; }
-			@Override
-			public void reject(Throwable t) { handler.reject(t); }
-		});
+		return this.fail(handler, null);
 	}
 	
 	/**
@@ -965,27 +998,15 @@ public class Promise<OUT> {
 	 * @return
 	 */
 	public Promise<Void> failAsync(final IReject handler) {
-		return this.then(new Handler<Void,OUT>() {
-			@Override
-			public Void resolve(OUT out) { return null; }
-			@Override
-			public void reject(Throwable t) { handler.reject(t); }
-		}, getBG());
+		return this.fail(handler, getBG());
 	}
 	
 	/**
-	 * 
-	 * @param cb
+	 * @param handler
 	 * @return
 	 */
-	@SuppressWarnings("unchecked")
-	public <RT,A> Promise<RT> then( final IUnaryCallback<RT,A> cb ) {
-		return this.then((Handler<RT,OUT>) new Handler<RT, Unary<A>>() {
-			@Override
-			public RT resolve(Unary<A> in) throws Exception {
-				return cb.resolve(in.get0());
-			}
-		}, null);
+	public Promise<Void> fail(final IReject handler, Executor exe) {
+		return this.then(new FailHandler<OUT>(handler), exe);
 	}
 	
 	/**
