@@ -10,7 +10,6 @@ import java.lang.annotation.Target;
 import org.junit.Test;
 
 import com.inmotionsoftware.promise.Promise;
-import com.inmotionsoftware.promise.Promise.Handler;
 import com.inmotionsoftware.promise.Promise.IDeferred;
 
 public class TestPromise extends PromiseTestCase {

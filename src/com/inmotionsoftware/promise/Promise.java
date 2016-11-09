@@ -7,14 +7,12 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.inmotionsoftware.tuple.Pair;
 import com.inmotionsoftware.tuple.Quartet;
 import com.inmotionsoftware.tuple.Quintet;
 import com.inmotionsoftware.tuple.Triplet;
-import com.inmotionsoftware.tuple.Unary;
 
 /**
  * @author bghoward

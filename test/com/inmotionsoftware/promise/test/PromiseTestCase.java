@@ -11,8 +11,6 @@ import com.inmotionsoftware.promise.Promise;
 import com.inmotionsoftware.promise.Promise.AggregateResults;
 import com.inmotionsoftware.promise.test.TestPromise.AsyncTest;
 import com.inmotionsoftware.promise.util.MainLooper;
-import com.inmotionsoftware.tuple.Pair;
-import com.inmotionsoftware.tuple.Tuple;
 
 import junit.framework.TestCase;;
 
