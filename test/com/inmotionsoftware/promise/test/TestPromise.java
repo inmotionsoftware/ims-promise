@@ -1,41 +1,11 @@
 package com.inmotionsoftware.promise.test;
 
-import static org.junit.Assert.assertNotEquals;
-
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-
 import org.junit.Test;
 
 import com.inmotionsoftware.promise.Promise;
 import com.inmotionsoftware.promise.Promise.IDeferred;
 
 public class TestPromise extends PromiseTestCase {
-
-	@Retention(RetentionPolicy.RUNTIME)
-	@Target(ElementType.METHOD) // on class level
-	public @interface AsyncTest {
-		String group() default "";
-	}
-
-	private Thread mMain;
-
-	@Override
-	protected void setUp() throws Exception {
-		mMain = Thread.currentThread();
-		super.setUp();
-	}
-
-	public void assertIsMainThread() {
-		Thread t = Thread.currentThread();
-		assertEquals(mMain, t);
-	}
-
-	public void assertIsBackgroundThread() {
-		assertNotEquals(mMain, Thread.currentThread());
-	}
 
 	@Test
 	public void testAlways() {
@@ -135,7 +105,6 @@ public class TestPromise extends PromiseTestCase {
 	
 	@AsyncTest(group="testFail")
 	public Promise<Void> testFailIsCalled() {
-
 		return Promise.make((IDeferred<Integer> def) -> {
 			throw new RuntimeException();
 
@@ -147,6 +116,22 @@ public class TestPromise extends PromiseTestCase {
 			assertNotNull(t);
 		});
 	}
+	
+	@AsyncTest(group="testAsync")
+	public Promise<Void> testAsyncThen() {
+		Promise<Void> promise = Promise.resolve().thenAsync(()->{});
+
+		try { // give it time to complete
+			Thread.sleep(250);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+
+		return promise.then(()-> {
+			assertIsBackgroundThread();
+		});
+	}
+
 	
 	@AsyncTest(group="testAsync")
 	public Promise<String> testMakeAsync() {
@@ -170,11 +155,8 @@ public class TestPromise extends PromiseTestCase {
 	public Promise<Integer> testMakeOnMain() {
 		assertIsMainThread();
 		return Promise.makeOnMain((IDeferred<Integer> deferred) -> {
+			assertIsMainThread();
 			deferred.resolve(1);
-//			throw new RuntimeException();
-//			assertIsMainThread();
-//			assertIsBackgroundThread();
-
 		});
 	}
 }

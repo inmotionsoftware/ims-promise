@@ -21,7 +21,7 @@ import com.inmotionsoftware.tuple.Triplet;
  */
 public class Promise<OUT> {
 	
-	public static final String VERSION = "0.1.2"; 
+	public static final String VERSION = "0.1.3"; 
 	
 	/**
 	 * @author bghoward
@@ -273,6 +273,7 @@ public class Promise<OUT> {
 	 */
 	private interface IOutComponent<OUT> {
 		public void addChild( IInComponent<OUT> child );
+		public Executor getExecutor(); 
 	}
 	
 	/**
@@ -350,6 +351,10 @@ public class Promise<OUT> {
 			// this promise has already been resolved, go ahead and process the results!
 			if (result != null) child.resolve(result);
 		}		
+		
+		public Executor getExecutor() {
+			return mExecutor;
+		}
 	}
 	
 	/**
@@ -412,7 +417,7 @@ public class Promise<OUT> {
 						DeferredContinuation.this.reject(e);
 					}
 				});				
-			} catch (Exception e) {
+			} catch (Throwable e) {
 				DeferredContinuation.this.reject(e);
 			}
 		}
@@ -450,7 +455,7 @@ public class Promise<OUT> {
 			try {				
 				OUT out = mCallback.resolve(in);
 				result = new Result<OUT>(out, null);
-			} catch (Exception e) {
+			} catch (Throwable e) {
 				result = new Result<OUT>(null, e);
 			}
 			dispatchResult(result);
@@ -466,7 +471,7 @@ public class Promise<OUT> {
 			} else {				
 				try {
 					mCallback.reject(t);
-				} catch(Exception e) {}				
+				} catch(Throwable e) {}				
 				result = new Result<OUT>(null, t);
 			}
 			dispatchResult(result);
@@ -580,6 +585,8 @@ public class Promise<OUT> {
 			public void run(IDeferred<AggregateResults<T>> resolve) throws Exception {
 				all.attach(resolve);
 			}
+		}).then( (AggregateResults<T> res) -> {
+			return res;
 		});
 	}
 
@@ -819,6 +826,10 @@ public class Promise<OUT> {
 	 * @return
 	 */
 	public <RT> Promise<RT> then( final Handler<RT, OUT> handler, Executor exe ) {
+		if (exe == null) { // inherit from the parent
+			exe = mOut.getExecutor();
+		}
+
 		CallbackContinuation<RT,OUT> child = new CallbackContinuation<>(handler, exe);
 		mOut.addChild(child);
 		return new Promise<>(child);
