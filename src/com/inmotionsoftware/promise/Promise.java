@@ -21,30 +21,30 @@ import com.inmotionsoftware.tuple.Triplet;
  */
 public class Promise<OUT> {
 	
-	public static final String VERSION = "0.1.3"; 
+	public static final String VERSION = "0.1.4"; 
 	
 	/**
 	 * @author bghoward
 	 *
 	 */
-	public static interface IReject {
-		public void reject(Throwable t);
+	public interface IReject {
+		void reject(Throwable t);
 	}
 	
 	/**
 	 * @author bghoward
 	 *
 	 */
-	public static interface IAlways {
-		public void always();
+	public interface IAlways {
+		void always();
 	}
 	
 	/**
 	 * @author bghoward
 	 *
 	 */
-	public static interface IResolve<OUT,IN> {
-		public OUT resolve(IN in) throws Exception;
+	public interface IResolve<OUT,IN> {
+		OUT resolve(IN in) throws Exception;
 	}
 	
 	/**
@@ -52,8 +52,8 @@ public class Promise<OUT> {
 	 *
 	 * @param <IN>
 	 */
-	public static interface VoidResolve<IN> {
-		public abstract void resolve(IN in) throws Exception;
+	public interface VoidResolve<IN> {
+		void resolve(IN in) throws Exception;
 	}
 	
 	/**
@@ -61,26 +61,27 @@ public class Promise<OUT> {
 	 *
 	 * @param <OUT>
 	 */
-	public static interface ResolveVoid<OUT> {
-		public abstract OUT resolve() throws Exception;
+	public interface ResolveVoid<OUT> {
+		OUT resolve() throws Exception;
 	}
 	
 	/**
 	 * @author bghoward
 	 *
 	 */
-	public static interface VoidResolveVoid {
-		public abstract void resolve() throws Exception;
+	public interface VoidResolveVoid {
+		void resolve() throws Exception;
 	}
 	
 	/**
 	 * @author bghoward
 	 *
 	 */
-	public static interface IPromiseResolve<OUT,IN> extends IResolve<Promise<OUT>,IN> {
+	public interface IPromiseResolve<OUT,IN> extends IResolve<Promise<OUT>,IN> {
 		@Override
-		public Promise<OUT> resolve(IN in) throws Exception;
+		Promise<OUT> resolve(IN in) throws Exception;
 	}
+
 	
 	/**
 	 * 
@@ -93,11 +94,39 @@ public class Promise<OUT> {
 		@Override
 		public abstract OUT resolve(IN in) throws Exception;
 		@Override
-		public void always() {}
-		@Override
 		public void reject(Throwable t) {}
+		@Override
+		public void always() {}
 	}
-	
+
+    private static class ProxyHandler<OUT,IN> extends Handler<OUT,IN> {
+
+        private IResolve<OUT,IN> mResolve;
+        private IReject mReject;
+        private IAlways mAlways;
+
+        ProxyHandler(IResolve<OUT,IN> resolve, IReject reject, IAlways always) {
+            mResolve = resolve;
+            mReject = reject;
+            mAlways = always;
+        }
+
+        @Override
+        public OUT resolve(IN in) throws Exception {
+            if (mResolve != null) return mResolve.resolve(in);
+            return null;
+        }
+
+        @Override
+        public void reject(Throwable t) {
+            if (mReject != null) mReject.reject(t);
+        }
+
+        @Override
+        public void always() {
+            if (mAlways != null) mAlways.always();
+        }
+    }
 
 	/**
 	 * @author bghoward
@@ -107,8 +136,8 @@ public class Promise<OUT> {
 	private static class FailHandler<IN> extends Handler<Void,IN> {
 		private final IReject mChild;
 		
-		public FailHandler(IReject child) {
-			assert(child != null);
+		FailHandler(IReject child) {
+			if (child == null) throw new NullPointerException("FailHandler must have a child handler");
 			mChild = child;
 		}
 		
@@ -141,7 +170,7 @@ public class Promise<OUT> {
 	 * @param <A>
 	 */
 	public interface IUnaryCallback<OUT,A> {
-		public OUT resolve(A a) throws Exception;
+		OUT resolve(A a) throws Exception;
 	}
 	
 	/**
@@ -153,7 +182,7 @@ public class Promise<OUT> {
 	 * @param <B>
 	 */
 	public interface IPairCallback<OUT,A,B> {
-		public OUT resolve(A a, B b) throws Exception;
+		OUT resolve(A a, B b) throws Exception;
 	}
 	
 	/**
@@ -166,7 +195,7 @@ public class Promise<OUT> {
 	 * @param <C>
 	 */
 	public interface ITripletCallback<OUT,A,B,C> {
-		public OUT resolve(A a, B b, C c) throws Exception;
+		OUT resolve(A a, B b, C c) throws Exception;
 	}
 	
 	/**
@@ -180,7 +209,7 @@ public class Promise<OUT> {
 	 * @param <D>
 	 */
 	public interface IQuartetCallback<OUT,A,B,C,D> {
-		public OUT resolve(A a, B b, C c, D d) throws Exception;
+		OUT resolve(A a, B b, C c, D d) throws Exception;
 	}
 	
 	/**
@@ -195,7 +224,7 @@ public class Promise<OUT> {
 	 * @param <E>
 	 */
 	public interface IQuintetCallback<OUT,A,B,C,D,E> {
-		public OUT resolve(A a, B b, C c, D d, E e) throws Exception;
+		OUT resolve(A a, B b, C c, D d, E e) throws Exception;
 	}
 
 	/**
@@ -203,9 +232,9 @@ public class Promise<OUT> {
 	 *
 	 * @param <IN>
 	 */
-	public static interface IDeferred<IN> {	
-		public void resolve(IN in);
-		public void reject(Throwable e);
+	public interface IDeferred<IN> {
+		void resolve(IN in);
+		void reject(Throwable e);
 	}
 	
 	/**
@@ -213,7 +242,7 @@ public class Promise<OUT> {
 	 *
 	 * @param <IN>
 	 */
-	public static interface Deferrable<IN> {
+	public interface Deferrable<IN> {
 		void run(IDeferred<IN> resolve) throws Exception;
 	}
 
@@ -224,35 +253,40 @@ public class Promise<OUT> {
 	 * @param <OUT>
 	 */
 	private static class Result<OUT> {
-		public OUT out;
-		public Throwable error;
-		public Result(OUT o, Throwable err) {
+		final OUT out;
+		final Throwable error;
+		Result(OUT o, Throwable err) {
 			this.out = o;
 			this.error = err;
 		}
 	}
-	
-	public static class AggregateResults<T> {
+
+    /**
+     *
+     * @param <T> Promises of type T
+     */
+	public final static class AggregateResults<T> {
 		private final List<T> mSucceeded = new ArrayList<>();
-		private final List<Throwable> mFailed = new ArrayList<>();;
+		private final List<Throwable> mFailed = new ArrayList<>();
+
+        private AggregateResults() {}
 		
-		public  void success(T suc) {
+		void success(T suc) {
 			synchronized(mSucceeded) {
 				mSucceeded.add(suc);				
 			}
 		}
 		
-		public synchronized void failed(Throwable t) {
+		synchronized void failed(Throwable t) {
 			synchronized(mFailed) {
 				mFailed.add(t);
 			}
 		}
 		
-		public List<T> getSucceeded() {
-			return mSucceeded;
-		}
-		
-		public List<Throwable> getFailed() {
+		public List<T> getSuccesses() {
+            return mSucceeded;
+        }
+		public List<Throwable> getFailures() {
 			return mFailed;
 		}
 	}
@@ -263,7 +297,7 @@ public class Promise<OUT> {
 	 * @param <IN>
 	 */
 	private interface IInComponent<IN> {
-		public void resolve(Result<IN> result);
+		void resolve(Result<IN> result);
 	}
 	
 	/**
@@ -272,8 +306,8 @@ public class Promise<OUT> {
 	 * @param <OUT>
 	 */
 	private interface IOutComponent<OUT> {
-		public void addChild( IInComponent<OUT> child );
-		public Executor getExecutor(); 
+		void addChild( IInComponent<OUT> child );
+		Executor getExecutor();
 	}
 	
 	/**
@@ -288,12 +322,12 @@ public class Promise<OUT> {
 		private Result<OUT> mResult;
 		private final Executor mExecutor;
 		
-		protected BaseContinuation(Executor exe) {
+		BaseContinuation(Executor exe) {
 			mExecutor = exe;
 		}
 		
 		@Override
-		public void resolve( Result<IN> result ) {
+		public void resolve( final Result<IN> result ) {
 			runWithExecutor(new Runnable() {
 				@Override
 				public void run() {
@@ -306,7 +340,7 @@ public class Promise<OUT> {
 			});
 		}
 		
-		protected void runWithExecutor(Runnable r) {
+		void runWithExecutor(Runnable r) {
 			if (mExecutor != null) {
 				mExecutor.execute(r);
 			} else {
@@ -317,7 +351,7 @@ public class Promise<OUT> {
 		protected abstract void resolve(IN in);
 		protected abstract void reject(Throwable t);
 		
-		protected void dispatchResult(Result<OUT> result) {
+		void dispatchResult(Result<OUT> result) {
 
 			List< IInComponent<OUT> > children = null;
 			synchronized (this) {
@@ -360,11 +394,10 @@ public class Promise<OUT> {
 	/**
 	 * @author bghoward
 	 *
-	 * @param <OUT>
-	 * @param <IN>
+	 * @param <T>
 	 */
 	private static class ResolvedContinuation<T> extends BaseContinuation<T,T> {
-		protected ResolvedContinuation(T res, Throwable t) {
+		ResolvedContinuation(T res, Throwable t) {
 			super(null);
 			super.mResult = new Result<T>(res, t);
 		}
@@ -383,19 +416,18 @@ public class Promise<OUT> {
 	/**
 	 * @author bghoward
 	 *
-	 * @param <OUT>
-	 * @param <IN>
+	 * @param <T>
 	 */
 	private static class DeferredContinuation<T> extends BaseContinuation<T,T> {
 		
 		private final Deferrable<T> mDeferrable;
 		
-		protected DeferredContinuation( Deferrable<T> d, Executor exe ) {
+		DeferredContinuation( Deferrable<T> d, Executor exe ) {
 			super(exe);
 			mDeferrable = d;
 		}
 
-		public void start() {
+		void start() {
 			runWithExecutor(new Runnable() {
 				@Override
 				public void run() {
@@ -443,9 +475,9 @@ public class Promise<OUT> {
 
 		private final Handler<OUT,IN> mCallback;
 		
-		protected CallbackContinuation( Handler<OUT,IN> cb, Executor exe) {
+		CallbackContinuation( Handler<OUT,IN> cb, Executor exe) {
 			super(exe);
-			assert(cb != null);
+			if (cb == null) throw new NullPointerException("CallbackContinuation cannot have a null callback");
 			mCallback = cb;
 		}
 		
@@ -454,9 +486,9 @@ public class Promise<OUT> {
 			Result<OUT> result;
 			try {				
 				OUT out = mCallback.resolve(in);
-				result = new Result<OUT>(out, null);
+				result = new Result<>(out, null);
 			} catch (Throwable e) {
-				result = new Result<OUT>(null, e);
+				result = new Result<>(null, e);
 			}
 			dispatchResult(result);
 			mCallback.always();
@@ -464,18 +496,20 @@ public class Promise<OUT> {
 
 		@Override
 		protected void reject(Throwable t) {
-			
-			Result<OUT> result = null;
-			if (mCallback instanceof FailHandler) {
-				result = new Result<OUT>(null, null);
-			} else {				
-				try {
-					mCallback.reject(t);
-				} catch(Throwable e) {}				
-				result = new Result<OUT>(null, t);
-			}
-			dispatchResult(result);
-			mCallback.always();
+            try {
+                try {
+                    mCallback.reject(t);
+                } catch(Throwable e) {
+                    // ignore: we don't want the handler to cause our promise chain to stop
+                }
+
+                // decide if we should forward the error, or do we suppress it...
+                Throwable fwd = (mCallback instanceof FailHandler) ? null : t;
+                dispatchResult(new Result<OUT>(null, fwd));
+
+            } finally {
+                mCallback.always(); // we should always notify
+            }
 		}
 	}
 
@@ -503,7 +537,7 @@ public class Promise<OUT> {
 
 	
 	/**
-	 * @param main
+	 * @param main the executor for the main thread
 	 */
 	public static void setMainExecutor(Executor main) {
 		synchronized(Promise.class) {
@@ -512,7 +546,7 @@ public class Promise<OUT> {
 	}
 	
 	/**
-	 * @param bg
+	 * @param bg the executor for background threads
 	 */
 	public static void setBackgroundExecutor(Executor bg) {
 		synchronized(Promise.class) {
@@ -521,15 +555,15 @@ public class Promise<OUT> {
 	}
 
 	/**
-	 * @param out
+	 * @param out the previous promise in the chain
 	 */
 	private Promise(IOutComponent<OUT> out) {
 		mOut = out;
 	}
 	
 	/**
-	 * @param iter
-	 * @return
+	 * @param iter iterable list of promises
+	 * @return a promise
 	 */
 	public static<T> Promise<AggregateResults<T>> all(final Iterable<Promise<T>> iter) {
 		
@@ -549,11 +583,11 @@ public class Promise<OUT> {
 				decrement();
 			}
 			
-			public void increment() {
+			private void increment() {
 				mCount.incrementAndGet();
 			}
-			
-			public void decrement() {
+
+			private void decrement() {
 				int count = mCount.decrementAndGet();
 				if (count == 0) complete();
 			}
@@ -579,20 +613,18 @@ public class Promise<OUT> {
 			} 
 		};
 
-		AllHandler all = new AllHandler();		
+		final AllHandler all = new AllHandler();
 		return Promise.make(new Deferrable<AggregateResults<T>>() {
 			@Override
 			public void run(IDeferred<AggregateResults<T>> resolve) throws Exception {
 				all.attach(resolve);
 			}
-		}).then( (AggregateResults<T> res) -> {
-			return res;
 		});
 	}
 
 	/**
-	 * @param in
-	 * @return
+	 * @param in the item to resolve this promise with
+	 * @return a resolved promise
 	 */
 	public static <IN> Promise<IN> resolve( IN in ) {
 		return new Promise<>(new ResolvedContinuation<IN>(in, null));
@@ -600,40 +632,39 @@ public class Promise<OUT> {
 	
 	/**
 	 * 
-	 * @return
+	 * @return a resolved promise of type Void
 	 */
 	public static Promise<Void> resolve() {
-		Void v = null;
-		return resolve(v);
+		return resolve(null);
 	}
 	
 	/**
-	 * @param t
-	 * @return
+	 * @param t the error to reject this promise with
+	 * @return a new promise rejected with an error
 	 */
 	public static <T> Promise<T> reject(Throwable t) {
 		return new Promise<T>(new ResolvedContinuation<T>(null, t));
 	}
 	
 	/**
-	 * @param cb
-	 * @return
+	 * @param def the deferrable this promise will be resolved with
+	 * @return a new Promise to be resolved by the Deferrable
 	 */
 	public static <OUT> Promise<OUT> makeAsync( Deferrable<OUT> def) {
 		return make(def, getBG());
 	}
 	
 	/**
-	 * @param cb
-	 * @return
+     * @param def the deferrable this promise will be resolved with
+     * @return a new Promise to be resolved by the Deferrable
 	 */
 	public static <OUT> Promise<OUT> makeOnMain( Deferrable<OUT> def) {
 		return make(def, getMain());
 	}
 	
 	/**
-	 * @param cb
-	 * @return
+     * @param def the deferrable this promise will be resolved with
+     * @return a new Promise to be resolved by the Deferrable
 	 */
 	public static <OUT> Promise<OUT> make( Deferrable<OUT> def, Executor exe ) {
 		DeferredContinuation<OUT> cont = new DeferredContinuation<>(def, exe);
@@ -642,45 +673,42 @@ public class Promise<OUT> {
 	}
 	
 	/**
-	 * @param cb
-	 * @return
+     * @param def the deferrable this promise will be resolved with
+     * @return a new Promise to be resolved by the Deferrable
 	 */
 	public static <OUT> Promise<OUT> make( Deferrable<OUT> def ) {
 		return make(def, null);
 	}
 	
 	/**
-	 * @param func
-	 * @return
+	 * @param handler the handler for the next promise in the chain
+	 * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> handler ) {
-		return then(handler, null);
+		return then(handler, (Executor)null);
 	}
 	
 	/**
 	 * 
-	 * @param handler
-	 * @return
+	 * @param handler the handler for the next promise in the chain
+	 * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final IResolve<RT, OUT> handler, Executor exe ) {
-		return this.then(new Handler<RT,OUT>() {
-			@Override
-			public RT resolve(OUT in) throws Exception { return handler.resolve(in); }
-		}, exe);
-	}
+        return this.then(new ProxyHandler<>(handler, null, null), exe);
+    }
 	
 	/**
-	 * @param handler
-	 * @return
+	 * @param handler the handler for the next promise in the chain
+	 * @return a new promise chained by this one
 	 */
 	public Promise<Void> then( final VoidResolve<OUT> handler ) {
 		return this.then(handler, null);
 	}
 	
 	/**
-	 * @param handler
-	 * @param exe
-	 * @return
+	 * @param handler the handler for the next promise in the chain
+	 * @param exe the executor that will process this promise
+	 * @return a new promise chained by this one
 	 */
 	public Promise<Void> then( final VoidResolve<OUT> handler, Executor exe ) {
 		return this.then(new Handler<Void,OUT>() {
@@ -690,17 +718,17 @@ public class Promise<OUT> {
 	}
 
 	/**
-	 * @param handler
-	 * @return
+	 * @param handler the handler for the next promise in the chain
+	 * @return a new promise chained by this one
 	 */
 	public Promise<Void> then( final VoidResolveVoid handler ) {
 		return then(handler, null);
 	}
 	
 	/**
-	 * @param handler
-	 * @param exe
-	 * @return
+	 * @param handler the handler for the next promise in the chain
+	 * @param exe the executor that will process this promise
+     * @return a new promise chained by this one
 	 */
 	public Promise<Void> then( final VoidResolveVoid handler, Executor exe ) {
 		return this.then(new Handler<Void,OUT>() {
@@ -711,17 +739,17 @@ public class Promise<OUT> {
 	
 	
 	/**
-	 * @param handler
-	 * @return
+	 * @param handler the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final ResolveVoid<RT> handler ) {
 		return this.then(handler, null);
 	}
 
 	/**
-	 * @param handler
-	 * @param exe
-	 * @return
+     * @param handler the handler for the next promise in the chain
+     * @param exe the executor that will process this promise
+     * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final ResolveVoid<RT> handler, Executor exe ) {
 		return this.then(new Handler<RT,OUT>() {
@@ -729,34 +757,64 @@ public class Promise<OUT> {
 			public RT resolve(OUT in) throws Exception { return handler.resolve(); }
 		}, exe);
 	}
-	
+
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @param exe the executor that will process this promise
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> then( IResolve<RT,OUT> resolve, IReject reject, IAlways always, Executor exe ) {
+        return then(new ProxyHandler<>(resolve, reject, always), exe);
+    }
+
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> then( IResolve<RT,OUT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, null);
+    }
+
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> then( IResolve<RT,OUT> resolve, IReject reject) {
+        return then(resolve, reject, null);
+    }
+
 	/**
-	 * @param cb
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final Handler<RT,OUT> cb ) {
-		return this.then(cb, null);
+		return this.then(cb, (Executor)null);
 	}
 	
 	/**
-	 * @param cb
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final IResolve<RT,OUT> cb ) {
-		return this.then(cb, null);
+		return this.then(cb, (Executor)null);
 	}
 
 	/**
-	 * @param cb
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final IPromiseResolve<RT,OUT> cb ) {
-		return this.then(cb, null);
+		return this.then(cb, (Executor)null);
 	}
 	
 	/**
-	 * @param cb
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final IPromiseResolve<RT,OUT> cb, Executor exe ) {
 		return this.then(new PromiseHandler<RT, OUT>() {
@@ -768,10 +826,10 @@ public class Promise<OUT> {
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param handler the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> handler, Executor exe ) {
+	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> handler, final Executor exe ) {
 		// This is a special case of a promise returning another promise
 		
 		// We create a promise "proxy" that will wait for the promise of the promise to be resolved then forward the
@@ -787,6 +845,12 @@ public class Promise<OUT> {
 
 					@Override
 					public Void resolve(Promise<RT> in) {
+						
+						if (in == null) {
+							promise.reject(new NullPointerException());
+//							promise.resolve(null);
+							return null;
+						}
 						
 						// now we call the inner promise and forward the results
 						in.then(new Handler<Void,RT>() {
@@ -820,12 +884,12 @@ public class Promise<OUT> {
 	}
 	
 	/**
-	 * 
-	 * @param handler
-	 * @param exe
-	 * @return
+	 *
+     * @param handler the handler for the next promise in the chain
+     * @param exe the executor that will process this promise
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> then( final Handler<RT, OUT> handler, Executor exe ) {
+	public <RT> Promise<RT> then( Handler<RT, OUT> handler, Executor exe ) {
 		if (exe == null) { // inherit from the parent
 			exe = mOut.getExecutor();
 		}
@@ -835,248 +899,441 @@ public class Promise<OUT> {
 		return new Promise<>(child);
 	}
 
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> thenAsync( IResolve<RT,OUT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getBG());
+    }
+
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> thenAsync( IResolve<RT,OUT> resolve, IReject reject) {
+        return thenAsync(resolve, reject, null);
+    }
+
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> thenAsync( final IPromiseResolve<RT,OUT> cb ) {
+	public <RT> Promise<RT> thenAsync( IPromiseResolve<RT,OUT> cb ) {
 		return then(cb, getBG());
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> thenAsync( final IResolve<RT,OUT> func ) {
-		return then(func, getBG());
-	}
-	
-	/**
-	 * @param func
-	 * @return
-	 */
-	public Promise<Void> thenAsync( final VoidResolve<OUT> func ) {
-		return then(func, getBG());
-	}
-	
-	/**
-	 * @param func
-	 * @return
-	 */
-	public <RT> Promise<RT> thenAsync( final ResolveVoid<RT> func ) {
-		return then(func, getBG());
-	}
-	
-	/**
-	 * @param func
-	 * @return
-	 */
-	public Promise<Void> thenAsync( final VoidResolveVoid func ) {
-		return then(func, getBG());
-	}
-	
-	/**
-	 * @param func
-	 * @return
-	 */
-	public <RT> Promise<RT> thenAsync( final Handler<RT,OUT> cb ) {
+	public <RT> Promise<RT> thenAsync( IResolve<RT,OUT> cb ) {
 		return then(cb, getBG());
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> thenAsync( final PromiseHandler<RT,OUT> cb ) {
+	public Promise<Void> thenAsync( VoidResolve<OUT> cb ) {
 		return then(cb, getBG());
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> thenOnMain( final VoidResolve<OUT> func ) {
-		return then(func, getMain());
+	public <RT> Promise<RT> thenAsync( ResolveVoid<RT> cb ) {
+		return then(cb, getBG());
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> thenOnMain( final ResolveVoid<RT> func ) {
-		return then(func, getMain());
+	public Promise<Void> thenAsync( VoidResolveVoid cb ) {
+		return then(cb, getBG());
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> thenOnMain( final VoidResolveVoid func ) {
-		return then(func, getMain());
+	public <RT> Promise<RT> thenAsync( Handler<RT,OUT> cb ) {
+		return then(cb, getBG());
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> thenOnMain( final PromiseHandler<RT,OUT> cb ) {
+	public <RT> Promise<RT> thenAsync( PromiseHandler<RT,OUT> cb ) {
+		return then(cb, getBG());
+	}
+	
+	/**
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+	 */
+	public Promise<Void> thenOnMain( VoidResolve<OUT> cb ) {
+		return then(cb, getMain());
+	}
+	
+	/**
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+	 */
+	public <RT> Promise<RT> thenOnMain( ResolveVoid<RT> cb ) {
+		return then(cb, getMain());
+	}
+
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> thenOnMain( IResolve<RT,OUT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getMain());
+    }
+
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> thenOnMain( IResolve<RT,OUT> resolve, IReject reject) {
+        return thenAsync(resolve, reject, null);
+    }
+	
+	/**
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+	 */
+	public Promise<Void> thenOnMain( VoidResolveVoid cb ) {
+		return then(cb, getMain());
+	}
+	
+	/**
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+	 */
+	public <RT> Promise<RT> thenOnMain( PromiseHandler<RT,OUT> cb ) {
 		return then(cb, getMain());
 	}	
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> thenOnMain( final IPromiseResolve<RT,OUT> cb ) {
+	public <RT> Promise<RT> thenOnMain( IPromiseResolve<RT,OUT> cb ) {
 		return then(cb, getMain());
 	}
 	
 	/**
-	 * @param func
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public <RT> Promise<RT> thenOnMain( final IResolve<RT,OUT> func ) {
-		return then(func, getMain());
-	}
-	
-	/**
-	 * @param func
-	 * @return
-	 */
-	public <RT> Promise<RT> thenOnMain( final Handler<RT,OUT> cb ) {
+	public <RT> Promise<RT> thenOnMain( IResolve<RT,OUT> cb ) {
 		return then(cb, getMain());
 	}
 	
 	/**
-	 * @param handler
-	 * @return
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> alwaysAsync(final IAlways handler) {
-		return this.then(new Handler<Void,OUT>() {
-			@Override
-			public Void resolve(OUT out) { return null; }
-			@Override
-			public void always() { handler.always(); }
-		}, getBG());
+	public <RT> Promise<RT> thenOnMain( Handler<RT,OUT> cb ) {
+		return then(cb, getMain());
+	}
+	
+	/**
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+	 */
+	public Promise<Void> alwaysAsync( IAlways always ) {
+        return this.always(always, getBG());
 	}
 
 	/**
-	 * @param handler
-	 * @return
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> alwaysOnMain(final IAlways handler) {
-		return this.then(new Handler<Void,OUT>() {
-			@Override
-			public Void resolve(OUT out) { return null; }
-			@Override
-			public void always() { handler.always(); }
-		}, getMain());
+	public Promise<Void> alwaysOnMain( IAlways always ) {
+		return this.always(always, getMain());
 	}
 	
 	/**
-	 * @param handler
-	 * @return
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> always(final IAlways handler) {
-		return this.then(new Handler<Void,OUT>() {
-			@Override
-			public Void resolve(OUT out) { return null; }
-			@Override
-			public void always() { handler.always(); }
-		});
+	public Promise<Void> always( IAlways always ) {
+		return this.always(always, null);
 	}
 
+    /**
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> always( IAlways always, Executor exe ) {
+        return this.then(null, null, always, exe);
+    }
+
 	/**
-	 * @param handler
-	 * @return
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> failOnMain(final IReject handler) {
-		return this.fail(handler, getMain());
+	public Promise<Void> failOnMain(final IReject reject) {
+		return this.fail(reject, getMain());
 	}
 	
 	/**
-	 * @param handler
-	 * @return
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> fail(final IReject handler) {
-		return this.fail(handler, null);
+	public Promise<Void> fail(final IReject reject) {
+		return this.fail(reject, null);
 	}
 	
 	/**
-	 * @param handler
-	 * @return
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> failAsync(final IReject handler) {
-		return this.fail(handler, getBG());
+	public Promise<Void> failAsync(final IReject reject) {
+		return this.fail(reject, getBG());
 	}
 	
 	/**
-	 * @param handler
-	 * @return
+     * @param reject notified if the promise is rejected
+     * @param exe the executor that will process this promise
+     * @return a new promise chained by this one
 	 */
-	public Promise<Void> fail(final IReject handler, Executor exe) {
-		return this.then(new FailHandler<OUT>(handler), exe);
+	public Promise<Void> fail(final IReject reject, Executor exe) {
+		return this.then(new FailHandler<OUT>(reject), exe);
 	}
+
+    /**
+     *
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> failAsyncThenAlways(final IReject reject) {
+        return failThenAlways(reject, getBG());
+    }
+
+    /**
+     *
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> failOnMainThenAlways(final IReject reject) {
+        return failThenAlways(reject, getMain());
+    }
+
+    /**
+     *
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> failThenAlways(final IReject reject) {
+        return failThenAlways(reject, null);
+    }
+
+    /**
+     *
+     * @param reject
+     * @param exe
+     * @return
+     */
+    @SuppressWarnings("unchecked")
+    public Promise<Void> failThenAlways(final IReject reject, final Executor exe) {
+
+        return Promise.make(new Deferrable<Void>() {
+            @Override
+            public void run(final IDeferred<Void> def) throws Exception {
+                then(new Handler<Void, OUT>() {
+                    @Override
+                    public Void resolve(OUT out) throws Exception { return null; }
+
+                    @Override
+                    public void always() {
+                        def.resolve(null);
+                    }
+                }, exe);
+            }
+        });
+    }
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    @SuppressWarnings("unchecked")
+    public <RT,A,B> Promise<RT> then( final IPairCallback<RT,A,B> cb, Executor exe ) {
+        return this.then((Handler<RT,OUT>) new Handler<RT, Pair<A,B>>() {
+            @Override
+            public RT resolve(Pair<A,B> in) throws Exception {
+                return cb.resolve(in.get0(), in.get1());
+            }
+        }, exe);
+    }
 	
 	/**
-	 * 
-	 * @param cb
-	 * @return
+	 *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+	 */
+	public <RT,A,B> Promise<RT> then( IPairCallback<RT,A,B> cb ) {
+		return this.then(cb, null);
+	}
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B> Promise<RT> thenAsync( IPairCallback<RT,A,B> cb ) {
+        return this.then(cb, getBG());
+    }
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B> Promise<RT> thenOnMain( IPairCallback<RT,A,B> cb ) {
+        return this.then(cb, getMain());
+    }
+	
+	/**
+	 *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	@SuppressWarnings("unchecked")
-	public <RT,A,B> Promise<RT> then( final IPairCallback<RT,A,B> cb ) {
-		return this.then((Handler<RT,OUT>) new Handler<RT, Pair<A,B>>() {
-			@Override
-			public RT resolve(Pair<A,B> in) throws Exception {
-				return cb.resolve(in.get0(), in.get1());
-			}
-		}, null);
-	}
-	
-	/**
-	 * 
-	 * @param cb
-	 * @return
-	 */
-	@SuppressWarnings("unchecked")
-	public <RT,A,B,C> Promise<RT> then( final ITripletCallback<RT,A,B,C> cb ) {
+	public <RT,A,B,C> Promise<RT> then( final ITripletCallback<RT,A,B,C> cb, Executor exe ) {
 		return this.then((Handler<RT,OUT>) new Handler<RT, Triplet<A,B,C>>() {
 			@Override
 			public RT resolve(Triplet<A,B,C> in) throws Exception {
 				return cb.resolve(in.get0(), in.get1(), in.get2());
 			}
-		}, null);
+		}, exe);
 	}
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C> Promise<RT> then( ITripletCallback<RT,A,B,C> cb) {
+        return then(cb, null);
+    }
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C> Promise<RT> thenAsync( ITripletCallback<RT,A,B,C> cb) {
+        return then(cb, getBG());
+    }
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C> Promise<RT> thenOnMain( ITripletCallback<RT,A,B,C> cb) {
+        return then(cb, getMain());
+    }
 	
 	/**
-	 * 
-	 * @param cb
-	 * @return
+	 *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	@SuppressWarnings("unchecked")
-	public <RT,A,B,C,D> Promise<RT> then( final IQuartetCallback<RT,A,B,C,D> cb ) {
+	public <RT,A,B,C,D> Promise<RT> then( final IQuartetCallback<RT,A,B,C,D> cb, Executor exe  ) {
 		return this.then((Handler<RT,OUT>) new Handler<RT, Quartet<A,B,C,D>>() {
 			@Override
 			public RT resolve(Quartet<A,B,C,D> in) throws Exception {
 				return cb.resolve(in.get0(), in.get1(), in.get2(), in.get3());
 			}
-		}, null);
+		}, exe);
 	}
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C,D> Promise<RT> then( IQuartetCallback<RT,A,B,C,D> cb) {
+        return then(cb, null);
+    }
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C,D> Promise<RT> thenAsync( IQuartetCallback<RT,A,B,C,D> cb) {
+        return then(cb, getBG());
+    }
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C,D> Promise<RT> thenOnMain( IQuartetCallback<RT,A,B,C,D> cb) {
+        return then(cb, getMain());
+    }
 	
 	/**
-	 * 
-	 * @param cb
-	 * @return
+	 *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
 	 */
 	@SuppressWarnings("unchecked")
-	public <RT,A,B,C,D,E> Promise<RT> then( final IQuintetCallback<RT,A,B,C,D,E> cb ) {
+	public <RT,A,B,C,D,E> Promise<RT> then( final IQuintetCallback<RT,A,B,C,D,E> cb, Executor exe ) {
 		return this.then((Handler<RT,OUT>) new Handler<RT, Quintet<A,B,C,D,E>>() {
 			@Override
 			public RT resolve(Quintet<A,B,C,D,E> in) throws Exception {
 				return cb.resolve(in.get0(), in.get1(), in.get2(), in.get3(), in.get4());
 			}
-		}, null);
+		}, exe);
 	}
 
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C,D,E> Promise<RT> then(IQuintetCallback<RT,A,B,C,D,E> cb ) {
+        return then(cb, null);
+    }
+
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C,D,E> Promise<RT> thenAsync( IQuintetCallback<RT,A,B,C,D,E> cb ) {
+        return then(cb, getBG());
+    }
+
+
+    /**
+     *
+     * @param cb the handler for the next promise in the chain
+     * @return a new promise chained by this one
+     */
+    public <RT,A,B,C,D,E> Promise<RT> thenOnMain( IQuintetCallback<RT,A,B,C,D,E> cb ) {
+        return then(cb, getMain());
+    }
 }
 
