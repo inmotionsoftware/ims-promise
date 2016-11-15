@@ -120,8 +120,8 @@ public class PromiseTestCase extends TestCase {
 
 		loop.run();
 		
-		List<Throwable> fails = results[0].getFailed();
-		List<Object> sucs = results[0].getSucceeded();
+		List<Throwable> fails = results[0].getFailures();
+		List<Object> sucs = results[0].getSuccesses();
 		
 		assertTrue(fails.size() == 0);
 		assertEquals(promises.size(), sucs.size());

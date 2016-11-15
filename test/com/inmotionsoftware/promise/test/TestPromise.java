@@ -24,6 +24,29 @@ public class TestPromise extends PromiseTestCase {
 		String name = new Object() {}.getClass().getEnclosingMethod().getName();
 		runTests(name);
 	}
+
+	@Test
+	public void testPromisePromise() {
+		String name = new Object() {}.getClass().getEnclosingMethod().getName();
+		runTests(name);
+	}
+	
+	@AsyncTest(group = "testPromisePromise")
+	public Promise<Void> testNullPromise() {
+		
+		final Throwable[] err = new Throwable[] {null};
+		return Promise.resolve("String")
+		.thenAsync( (String result) -> {
+			return result;
+        }).thenOnMain( (String result) -> {
+        	// return null promise
+            return (Promise<Void>)null;
+        }).fail( (Throwable t) -> {
+        	err[0] = t;
+        }).always( () -> {
+            assertNotNull(err[0]);
+        });
+	}
 	
 	
 	@AsyncTest(group = "testAlways")
@@ -80,7 +103,7 @@ public class TestPromise extends PromiseTestCase {
 	}
 	
 	@AsyncTest(group="testFail")
-	public Promise<Void> testFailDefaultsToMain() {
+	public Promise<Throwable> testFailDefaultsToMain() {
 		Exception e = new RuntimeException();
 		return Promise.reject(e).fail((Throwable t) -> {
 			assertIsMainThread();
@@ -88,7 +111,7 @@ public class TestPromise extends PromiseTestCase {
 	}
 	
 	@AsyncTest(group="testFail")
-	public Promise<Void> testFailOnMain() {
+	public Promise<Throwable> testFailOnMain() {
 		Exception e = new RuntimeException();
 		return Promise.reject(e).failOnMain((Throwable t) -> {
 			assertIsMainThread();
@@ -96,7 +119,7 @@ public class TestPromise extends PromiseTestCase {
 	}
 
 	@AsyncTest(group="testFail")
-	public Promise<Void> testFailAsync() {
+	public Promise<Throwable> testFailAsync() {
 		Exception e = new RuntimeException();
 		return Promise.reject(e).failAsync((Throwable t) -> {
 			assertIsBackgroundThread();
@@ -104,7 +127,7 @@ public class TestPromise extends PromiseTestCase {
 	}
 	
 	@AsyncTest(group="testFail")
-	public Promise<Void> testFailIsCalled() {
+	public Promise<Throwable> testFailIsCalled() {
 		return Promise.make((IDeferred<Integer> def) -> {
 			throw new RuntimeException();
 

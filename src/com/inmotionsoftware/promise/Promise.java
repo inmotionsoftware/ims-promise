@@ -127,28 +127,6 @@ public class Promise<OUT> {
             if (mAlways != null) mAlways.always();
         }
     }
-
-	/**
-	 * @author bghoward
-	 *
-	 * @param <IN>
-	 */
-	private static class FailHandler<IN> extends Handler<Void,IN> {
-		private final IReject mChild;
-		
-		FailHandler(IReject child) {
-			if (child == null) throw new NullPointerException("FailHandler must have a child handler");
-			mChild = child;
-		}
-		
-		@Override
-		public Void resolve(IN in) throws Exception { return null; }
-		
-		@Override
-		public void reject(Throwable t) {
-			mChild.reject(t);
-		}
-	}
 	
 	/**
 	 * 
@@ -503,9 +481,8 @@ public class Promise<OUT> {
                     // ignore: we don't want the handler to cause our promise chain to stop
                 }
 
-                // decide if we should forward the error, or do we suppress it...
-                Throwable fwd = (mCallback instanceof FailHandler) ? null : t;
-                dispatchResult(new Result<OUT>(null, fwd));
+                // forward the error
+                dispatchResult(new Result<OUT>(null, t));
 
             } finally {
                 mCallback.always(); // we should always notify
@@ -1085,7 +1062,7 @@ public class Promise<OUT> {
      * @param reject notified if the promise is rejected
      * @return a new promise chained by this one
 	 */
-	public Promise<Void> failOnMain(final IReject reject) {
+	public Promise<Throwable> failOnMain(final IReject reject) {
 		return this.fail(reject, getMain());
 	}
 	
@@ -1093,7 +1070,7 @@ public class Promise<OUT> {
      * @param reject notified if the promise is rejected
      * @return a new promise chained by this one
 	 */
-	public Promise<Void> fail(final IReject reject) {
+	public Promise<Throwable> fail(final IReject reject) {
 		return this.fail(reject, null);
 	}
 	
@@ -1101,7 +1078,7 @@ public class Promise<OUT> {
      * @param reject notified if the promise is rejected
      * @return a new promise chained by this one
 	 */
-	public Promise<Void> failAsync(final IReject reject) {
+	public Promise<Throwable> failAsync(final IReject reject) {
 		return this.fail(reject, getBG());
 	}
 	
@@ -1110,8 +1087,20 @@ public class Promise<OUT> {
      * @param exe the executor that will process this promise
      * @return a new promise chained by this one
 	 */
-	public Promise<Void> fail(final IReject reject, Executor exe) {
-		return this.then(new FailHandler<OUT>(reject), exe);
+	public Promise<Throwable> fail(final IReject reject, final Executor exe) {
+        return Promise.make(new Deferrable<Throwable>() {
+            @Override
+            public void run(final IDeferred<Throwable> def) throws Exception {
+                IReject rej = new IReject() {
+                    @Override
+                    public void reject(Throwable t) {
+                        def.resolve(t);
+                        reject.reject(t);
+                    }
+                };
+                then(null, rej, null, exe);
+            }
+        });
 	}
 
     /**
