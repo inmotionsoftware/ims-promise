@@ -21,7 +21,7 @@ import com.inmotionsoftware.tuple.Triplet;
  */
 public class Promise<OUT> {
 	
-	public static final String VERSION = "0.1.4"; 
+	public static final String VERSION = "0.2.0"; 
 	
 	/**
 	 * @author bghoward
@@ -81,7 +81,6 @@ public class Promise<OUT> {
 		@Override
 		Promise<OUT> resolve(IN in) throws Exception;
 	}
-
 	
 	/**
 	 * 
@@ -99,6 +98,11 @@ public class Promise<OUT> {
 		public void always() {}
 	}
 
+    /**
+     *
+     * @param <OUT>
+     * @param <IN>
+     */
     private static class ProxyHandler<OUT,IN> extends Handler<OUT,IN> {
 
         private IResolve<OUT,IN> mResolve;
@@ -223,6 +227,28 @@ public class Promise<OUT> {
 	public interface Deferrable<IN> {
 		void run(IDeferred<IN> resolve) throws Exception;
 	}
+
+    /**
+     *
+     * @param <OUT>
+     * @param <IN>
+     */
+    public static class DeferredPromise<T> extends Promise<T> {
+        private final DeferredContinuation2<T> mCont;
+
+        DeferredPromise(Executor exe) {
+            super(new DeferredContinuation2<T>(exe));
+            mCont = (DeferredContinuation2<T>)mOut;
+        }
+
+        public void resolvePromise(T in) {
+            mCont.resolve(in);
+        }
+
+        public void rejectPromise(Throwable e) {
+            mCont.reject(e);
+        }
+    }
 
 
 	/**
@@ -390,13 +416,35 @@ public class Promise<OUT> {
 			dispatchResult(super.mResult);
 		}
 	}
-	
+
+    private static class DeferredContinuation2<T> extends BaseContinuation<T,T> {
+    	private boolean mResolved = false;
+    	
+        DeferredContinuation2(Executor exe) {
+            super(exe);
+        }
+
+        @Override
+        protected void resolve(T in) {
+            assert(!mResolved);
+            mResolved = true;
+            dispatchResult(new Result<T>(in, null));
+        }
+
+        @Override
+        protected void reject(Throwable t) {
+            assert(!mResolved);
+            mResolved = true;
+            dispatchResult(new Result<T>(null, t));
+        }
+    }
+
 	/**
 	 * @author bghoward
 	 *
 	 * @param <T>
 	 */
-	private static class DeferredContinuation<T> extends BaseContinuation<T,T> {
+	private static class DeferredContinuation<T> extends DeferredContinuation2<T> {
 		
 		private final Deferrable<T> mDeferrable;
 		
@@ -430,16 +478,6 @@ public class Promise<OUT> {
 			} catch (Throwable e) {
 				DeferredContinuation.this.reject(e);
 			}
-		}
-		
-		@Override
-		protected void resolve(T in) {
-			dispatchResult(new Result<T>(in, null));
-		}
-
-		@Override
-		protected void reject(Throwable t) {
-			dispatchResult(new Result<T>(null, t));
 		}
 	}
 
@@ -492,12 +530,23 @@ public class Promise<OUT> {
 
 	private static Executor gMain;
 	private static Executor gBack;
+    protected final IOutComponent<OUT> mOut;
 
-	private static Executor getMain() {
-		return gMain;
+    /**
+     *
+     * @return
+     */
+	public static synchronized Executor getMainExecutor() {
+        return gMain;
 	}
-	
-	private static Executor getBG() {
+
+    /**
+     *
+     * @return
+     */
+    public static synchronized Executor getBackgroundExecutor() {
+
+
 		synchronized(Promise.class) {
 			if (gBack == null) {
 				int cores = Runtime.getRuntime().availableProcessors();
@@ -508,27 +557,19 @@ public class Promise<OUT> {
 			return gBack;
 		}
 	}
-	
-	
-	private IOutComponent<OUT> mOut;
 
-	
 	/**
 	 * @param main the executor for the main thread
 	 */
-	public static void setMainExecutor(Executor main) {
-		synchronized(Promise.class) {
-			gMain = main;
-		}
+	public static synchronized void setMainExecutor(Executor main) {
+        gMain = main;
 	}
 	
 	/**
 	 * @param bg the executor for background threads
 	 */
-	public static void setBackgroundExecutor(Executor bg) {
-		synchronized(Promise.class) {
-			gBack = bg;
-		}
+	public static synchronized void setBackgroundExecutor(Executor bg) {
+        gBack = bg;
 	}
 
 	/**
@@ -543,60 +584,36 @@ public class Promise<OUT> {
 	 * @return a promise
 	 */
 	public static<T> Promise<AggregateResults<T>> all(final Iterable<Promise<T>> iter) {
-		
-		class AllHandler extends Handler<Void,T> {
-			
-			private final AggregateResults<T> mResults = new AggregateResults<>();
-			private AtomicInteger mCount = new AtomicInteger(0);
-			private IDeferred<AggregateResults<T>> mResolve;						
+        final DeferredPromise<AggregateResults<T>> rt = Promise.make();
 
-			private void attach(IDeferred<AggregateResults<T>> resolve) {				
-				mResolve = resolve;
-				increment();
-				for (Promise<T> promise : iter) {
-					increment();
-					promise.then(this);
-				}
-				decrement();
-			}
-			
-			private void increment() {
-				mCount.incrementAndGet();
-			}
+        final AggregateResults<T> results = new AggregateResults<>();
 
-			private void decrement() {
-				int count = mCount.decrementAndGet();
-				if (count == 0) complete();
-			}
-			
-			private void complete() {
-				mResolve.resolve(mResults);
-			}
-			
-			@Override
-			public void always() {
-				decrement();
-			}
+        int total = 0;
+        for (Promise<T> _ : iter) { ++total; }
+        final AtomicInteger count = new AtomicInteger(total);
 
-			@Override
-			public Void resolve(T in) {
-				mResults.success(in);
-				return null;
-			}
+        for (Promise<T> promise : iter) {
+            promise.then(new Handler<Void, T>() {
+                @Override
+                public Void resolve(T t) throws Exception {
+                    results.mSucceeded.add(t);
+                    return null;
+                }
 
-			@Override
-			public void reject(Throwable t) {
-				mResults.failed(t);
-			} 
-		};
+                public void reject(Throwable t) {
+                    results.mFailed.add(t);
+                }
 
-		final AllHandler all = new AllHandler();
-		return Promise.make(new Deferrable<AggregateResults<T>>() {
-			@Override
-			public void run(IDeferred<AggregateResults<T>> resolve) throws Exception {
-				all.attach(resolve);
-			}
-		});
+                public void always() {
+                    // done
+                    if (count.decrementAndGet() == 0) {
+                        rt.resolvePromise(results);
+                    }
+                }
+            });
+        }
+
+        return rt;
 	}
 
 	/**
@@ -628,7 +645,7 @@ public class Promise<OUT> {
 	 * @return a new Promise to be resolved by the Deferrable
 	 */
 	public static <OUT> Promise<OUT> makeAsync( Deferrable<OUT> def) {
-		return make(def, getBG());
+		return make(def, getBackgroundExecutor());
 	}
 	
 	/**
@@ -636,8 +653,17 @@ public class Promise<OUT> {
      * @return a new Promise to be resolved by the Deferrable
 	 */
 	public static <OUT> Promise<OUT> makeOnMain( Deferrable<OUT> def) {
-		return make(def, getMain());
+		return make(def, getMainExecutor());
 	}
+
+    public static <OUT> DeferredPromise<OUT> make() {
+        return new DeferredPromise<>(null);
+    }
+
+    public static <OUT> DeferredPromise<OUT> make(Executor exe) {
+        return new DeferredPromise<>(exe);
+    }
+
 	
 	/**
      * @param def the deferrable this promise will be resolved with
@@ -808,56 +834,49 @@ public class Promise<OUT> {
 	 */
 	public <RT> Promise<RT> then( final PromiseHandler<RT,OUT> handler, final Executor exe ) {
 		// This is a special case of a promise returning another promise
-		
-		// We create a promise "proxy" that will wait for the promise of the promise to be resolved then forward the
-		// results
-		final Promise<Promise<RT>> inner = this.then((Handler<Promise<RT>,OUT>)handler, exe);
-		
-		return Promise.make(new Deferrable<RT>() {
-			@Override
-			public void run(final IDeferred<RT> promise) {
-				
-				// call the outer promise and wait for the promised result
-				inner.then(new Handler<Void,Promise<RT>>() {
 
-					@Override
-					public Void resolve(Promise<RT> in) {
-						
-						if (in == null) {
-							promise.reject(new NullPointerException());
-//							promise.resolve(null);
-							return null;
-						}
-						
-						// now we call the inner promise and forward the results
-						in.then(new Handler<Void,RT>() {
-							@Override
-							public Void resolve(RT in) {
-								promise.resolve(in);
-								return null;
-							}	
-							
-							@Override
-							public void reject(Throwable t) {
-								promise.reject(t);
-							}
-							
-							@Override
-							public void always() {}
-						}, exe);
-						return null;
-					}
-					
-					@Override
-					public void reject(Throwable t) {
-						promise.reject(t);
-					}
-					
-					@Override
-					public void always() {}
-				});				
-			}
-		}, exe);
+        final DeferredPromise<RT> rt = Promise.make();
+
+        // call the outer promise and wait for the promised result
+        then((Handler<Promise<RT>,OUT>)handler, exe).then(new Handler<Void,Promise<RT>>() {
+
+            @Override
+            public Void resolve(Promise<RT> in) {
+
+                if (in == null) {
+                    rt.rejectPromise(new NullPointerException());
+                    return null;
+                }
+
+                // now we call the inner promise and forward the results
+                in.then(new Handler<Void,RT>() {
+                    @Override
+                    public Void resolve(RT in) {
+                        rt.resolvePromise(in);
+                        return null;
+                    }
+
+                    @Override
+                    public void reject(Throwable t) {
+                        rt.rejectPromise(t);
+                    }
+
+                    @Override
+                    public void always() {}
+                }, exe);
+                return null;
+            }
+
+            @Override
+            public void reject(Throwable t) {
+                rt.rejectPromise(t);
+            }
+
+            @Override
+            public void always() {}
+        });
+
+        return rt;
 	}
 	
 	/**
@@ -883,7 +902,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,IN> Promise<RT> thenAsync( IResolve<RT,OUT> resolve, IReject reject, IAlways always) {
-        return then(resolve, reject, always, getBG());
+        return then(resolve, reject, always, getBackgroundExecutor());
     }
 
     /**
@@ -900,7 +919,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenAsync( IPromiseResolve<RT,OUT> cb ) {
-		return then(cb, getBG());
+		return then(cb, getBackgroundExecutor());
 	}
 	
 	/**
@@ -908,7 +927,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenAsync( IResolve<RT,OUT> cb ) {
-		return then(cb, getBG());
+		return then(cb, getBackgroundExecutor());
 	}
 	
 	/**
@@ -916,7 +935,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Void> thenAsync( VoidResolve<OUT> cb ) {
-		return then(cb, getBG());
+		return then(cb, getBackgroundExecutor());
 	}
 	
 	/**
@@ -924,7 +943,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenAsync( ResolveVoid<RT> cb ) {
-		return then(cb, getBG());
+		return then(cb, getBackgroundExecutor());
 	}
 	
 	/**
@@ -932,7 +951,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Void> thenAsync( VoidResolveVoid cb ) {
-		return then(cb, getBG());
+		return then(cb, getBackgroundExecutor());
 	}
 	
 	/**
@@ -940,7 +959,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenAsync( Handler<RT,OUT> cb ) {
-		return then(cb, getBG());
+		return then(cb, getBackgroundExecutor());
 	}
 	
 	/**
@@ -948,7 +967,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenAsync( PromiseHandler<RT,OUT> cb ) {
-		return then(cb, getBG());
+		return then(cb, getBackgroundExecutor());
 	}
 	
 	/**
@@ -956,7 +975,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Void> thenOnMain( VoidResolve<OUT> cb ) {
-		return then(cb, getMain());
+		return then(cb, getMainExecutor());
 	}
 	
 	/**
@@ -964,7 +983,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenOnMain( ResolveVoid<RT> cb ) {
-		return then(cb, getMain());
+		return then(cb, getMainExecutor());
 	}
 
     /**
@@ -974,7 +993,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,IN> Promise<RT> thenOnMain( IResolve<RT,OUT> resolve, IReject reject, IAlways always) {
-        return then(resolve, reject, always, getMain());
+        return then(resolve, reject, always, getMainExecutor());
     }
 
     /**
@@ -991,7 +1010,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Void> thenOnMain( VoidResolveVoid cb ) {
-		return then(cb, getMain());
+		return then(cb, getMainExecutor());
 	}
 	
 	/**
@@ -999,7 +1018,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenOnMain( PromiseHandler<RT,OUT> cb ) {
-		return then(cb, getMain());
+		return then(cb, getMainExecutor());
 	}	
 	
 	/**
@@ -1007,7 +1026,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenOnMain( IPromiseResolve<RT,OUT> cb ) {
-		return then(cb, getMain());
+		return then(cb, getMainExecutor());
 	}
 	
 	/**
@@ -1015,7 +1034,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenOnMain( IResolve<RT,OUT> cb ) {
-		return then(cb, getMain());
+		return then(cb, getMainExecutor());
 	}
 	
 	/**
@@ -1023,7 +1042,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> thenOnMain( Handler<RT,OUT> cb ) {
-		return then(cb, getMain());
+		return then(cb, getMainExecutor());
 	}
 	
 	/**
@@ -1031,7 +1050,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Void> alwaysAsync( IAlways always ) {
-        return this.always(always, getBG());
+        return this.always(always, getBackgroundExecutor());
 	}
 
 	/**
@@ -1039,7 +1058,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Void> alwaysOnMain( IAlways always ) {
-		return this.always(always, getMain());
+		return this.always(always, getMainExecutor());
 	}
 	
 	/**
@@ -1063,7 +1082,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Throwable> failOnMain(final IReject reject) {
-		return this.fail(reject, getMain());
+		return this.fail(reject, getMainExecutor());
 	}
 	
 	/**
@@ -1079,7 +1098,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Throwable> failAsync(final IReject reject) {
-		return this.fail(reject, getBG());
+		return this.fail(reject, getBackgroundExecutor());
 	}
 	
 	/**
@@ -1088,19 +1107,15 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Throwable> fail(final IReject reject, final Executor exe) {
-        return Promise.make(new Deferrable<Throwable>() {
+        DeferredPromise<Throwable> p = Promise.make();
+        then(null, new IReject() {
             @Override
-            public void run(final IDeferred<Throwable> def) throws Exception {
-                IReject rej = new IReject() {
-                    @Override
-                    public void reject(Throwable t) {
-                        def.resolve(t);
-                        reject.reject(t);
-                    }
-                };
-                then(null, rej, null, exe);
+            public void reject(Throwable t) {
+                reject.reject(t);
+                p.resolvePromise(t);
             }
-        });
+        }, null, exe);
+        return p;
 	}
 
     /**
@@ -1109,7 +1124,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public Promise<Void> failAsyncThenAlways(final IReject reject) {
-        return failThenAlways(reject, getBG());
+        return failThenAlways(reject, getBackgroundExecutor());
     }
 
     /**
@@ -1118,7 +1133,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public Promise<Void> failOnMainThenAlways(final IReject reject) {
-        return failThenAlways(reject, getMain());
+        return failThenAlways(reject, getMainExecutor());
     }
 
     /**
@@ -1136,23 +1151,15 @@ public class Promise<OUT> {
      * @param exe
      * @return
      */
-    @SuppressWarnings("unchecked")
     public Promise<Void> failThenAlways(final IReject reject, final Executor exe) {
-
-        return Promise.make(new Deferrable<Void>() {
+        final DeferredPromise<Void> rt = Promise.make();
+        then(null, null, new IAlways() {
             @Override
-            public void run(final IDeferred<Void> def) throws Exception {
-                then(new Handler<Void, OUT>() {
-                    @Override
-                    public Void resolve(OUT out) throws Exception { return null; }
-
-                    @Override
-                    public void always() {
-                        def.resolve(null);
-                    }
-                }, exe);
+            public void always() {
+                rt.resolvePromise(null);
             }
-        });
+        }, exe);
+        return rt;
     }
 
     /**
@@ -1185,7 +1192,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B> Promise<RT> thenAsync( IPairCallback<RT,A,B> cb ) {
-        return this.then(cb, getBG());
+        return this.then(cb, getBackgroundExecutor());
     }
 
     /**
@@ -1194,7 +1201,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B> Promise<RT> thenOnMain( IPairCallback<RT,A,B> cb ) {
-        return this.then(cb, getMain());
+        return this.then(cb, getMainExecutor());
     }
 	
 	/**
@@ -1227,7 +1234,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B,C> Promise<RT> thenAsync( ITripletCallback<RT,A,B,C> cb) {
-        return then(cb, getBG());
+        return then(cb, getBackgroundExecutor());
     }
 
     /**
@@ -1236,7 +1243,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B,C> Promise<RT> thenOnMain( ITripletCallback<RT,A,B,C> cb) {
-        return then(cb, getMain());
+        return then(cb, getMainExecutor());
     }
 	
 	/**
@@ -1269,7 +1276,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B,C,D> Promise<RT> thenAsync( IQuartetCallback<RT,A,B,C,D> cb) {
-        return then(cb, getBG());
+        return then(cb, getBackgroundExecutor());
     }
 
     /**
@@ -1278,7 +1285,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B,C,D> Promise<RT> thenOnMain( IQuartetCallback<RT,A,B,C,D> cb) {
-        return then(cb, getMain());
+        return then(cb, getMainExecutor());
     }
 	
 	/**
@@ -1312,7 +1319,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B,C,D,E> Promise<RT> thenAsync( IQuintetCallback<RT,A,B,C,D,E> cb ) {
-        return then(cb, getBG());
+        return then(cb, getBackgroundExecutor());
     }
 
 
@@ -1322,7 +1329,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,A,B,C,D,E> Promise<RT> thenOnMain( IQuintetCallback<RT,A,B,C,D,E> cb ) {
-        return then(cb, getMain());
+        return then(cb, getMainExecutor());
     }
 }
 
