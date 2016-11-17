@@ -1,6 +1,7 @@
 package com.inmotionsoftware.promise;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
@@ -230,11 +231,10 @@ public class Promise<OUT> {
 
     /**
      *
-     * @param <OUT>
-     * @param <IN>
+     * @param <T>
      */
     public static class DeferredPromise<T> extends Promise<T> {
-        private final DeferredContinuation2<T> mCont;
+        final DeferredContinuation2<T> mCont;
 
         DeferredPromise(Executor exe) {
             super(new DeferredContinuation2<T>(exe));
@@ -417,9 +417,13 @@ public class Promise<OUT> {
 		}
 	}
 
+    /**
+     *
+     * @param <T>
+     */
     private static class DeferredContinuation2<T> extends BaseContinuation<T,T> {
-    	private boolean mResolved = false;
-    	
+        private boolean mResolved = false;
+
         DeferredContinuation2(Executor exe) {
             super(exe);
         }
@@ -534,7 +538,7 @@ public class Promise<OUT> {
 
     /**
      *
-     * @return
+     * @return the register executor for the main thread
      */
 	public static synchronized Executor getMainExecutor() {
         return gMain;
@@ -542,7 +546,7 @@ public class Promise<OUT> {
 
     /**
      *
-     * @return
+     * @return the register executor for background tasks
      */
     public static synchronized Executor getBackgroundExecutor() {
 
@@ -589,7 +593,8 @@ public class Promise<OUT> {
         final AggregateResults<T> results = new AggregateResults<>();
 
         int total = 0;
-        for (Promise<T> _ : iter) { ++total; }
+        for (Iterator<Promise<T>> it = iter.iterator(); it.hasNext(); it.next()) { ++total; }
+        
         final AtomicInteger count = new AtomicInteger(total);
 
         for (Promise<T> promise : iter) {
@@ -597,7 +602,7 @@ public class Promise<OUT> {
                 @Override
                 public Void resolve(T t) throws Exception {
                     results.mSucceeded.add(t);
-                    return null;
+                    return (Void)null;
                 }
 
                 public void reject(Throwable t) {
@@ -629,7 +634,7 @@ public class Promise<OUT> {
 	 * @return a resolved promise of type Void
 	 */
 	public static Promise<Void> resolve() {
-		return resolve(null);
+		return resolve((Void)null);
 	}
 	
 	/**
@@ -705,7 +710,7 @@ public class Promise<OUT> {
 	 * @return a new promise chained by this one
 	 */
 	public Promise<Void> then( final VoidResolve<OUT> handler ) {
-		return this.then(handler, null);
+		return this.then(handler, (Executor)null);
 	}
 	
 	/**
@@ -725,7 +730,7 @@ public class Promise<OUT> {
 	 * @return a new promise chained by this one
 	 */
 	public Promise<Void> then( final VoidResolveVoid handler ) {
-		return then(handler, null);
+		return then(handler, (Executor)null);
 	}
 	
 	/**
@@ -746,7 +751,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public <RT> Promise<RT> then( final ResolveVoid<RT> handler ) {
-		return this.then(handler, null);
+		return this.then(handler, (Executor)null);
 	}
 
 	/**
@@ -760,6 +765,58 @@ public class Promise<OUT> {
 			public RT resolve(OUT in) throws Exception { return handler.resolve(); }
 		}, exe);
 	}
+
+	/**
+	 * @param resolve notified if the promise is successfully resolved
+	 * @param reject notified if the promise is rejected
+	 * @param always notified regardless of the outcome
+	 * @param exe the executor that will process this promise
+	 * @return a new promise chained by this one
+	 */
+    public Promise<Void> then( final VoidResolve<OUT> resolve, IReject reject, IAlways always, Executor exe ) {
+        ProxyHandler<Void,OUT> proxy = new ProxyHandler<>(new IResolve<Void, OUT>() {
+            @Override
+            public Void resolve(OUT out) throws Exception {
+                resolve.resolve(out);
+                return null;
+            }
+        }, reject, always);
+
+        return then(proxy, exe);
+    }
+
+	/**
+	 * @param resolve notified if the promise is successfully resolved
+	 * @param reject notified if the promise is rejected
+	 * @param always notified regardless of the outcome
+	 * @param exe the executor that will process this promise
+	 * @return a new promise chained by this one
+	 */
+    public <RT> Promise<RT> then( final ResolveVoid<RT> resolve, IReject reject, IAlways always, Executor exe ) {
+        return then(new ProxyHandler<>(new IResolve<RT, OUT>() {
+			@Override
+			public RT resolve(OUT out) throws Exception {
+				return resolve.resolve();
+			}
+		}, reject, always), exe);
+    }
+
+	/**
+	 * @param resolve notified if the promise is successfully resolved
+	 * @param reject notified if the promise is rejected
+	 * @param always notified regardless of the outcome
+	 * @param exe the executor that will process this promise
+	 * @return a new promise chained by this one
+	 */
+    public Promise<Void> then( final VoidResolveVoid resolve, IReject reject, IAlways always, Executor exe ) {
+        return then(new ProxyHandler<>(new IResolve<Void, OUT>() {
+			@Override
+			public Void resolve(OUT out) throws Exception {
+				resolve.resolve();
+				return null;
+			}
+		}, reject, always), exe);
+    }
 
     /**
      * @param resolve notified if the promise is successfully resolved
@@ -779,7 +836,37 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,IN> Promise<RT> then( IResolve<RT,OUT> resolve, IReject reject, IAlways always) {
-        return then(resolve, reject, always, null);
+        return then(resolve, reject, always, (Executor)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> then( VoidResolve<OUT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always,  (Executor)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> then( ResolveVoid<RT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always,  (Executor)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> then( VoidResolveVoid resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always,  (Executor)null);
     }
 
     /**
@@ -788,7 +875,34 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,IN> Promise<RT> then( IResolve<RT,OUT> resolve, IReject reject) {
-        return then(resolve, reject, null);
+        return then(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> then( VoidResolve<OUT> resolve, IReject reject) {
+        return then(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public <RT> Promise<RT> then( ResolveVoid<RT> resolve, IReject reject) {
+        return then(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> then( VoidResolveVoid resolve, IReject reject) {
+        return then(resolve, reject, (IAlways)null);
     }
 
 	/**
@@ -908,10 +1022,68 @@ public class Promise<OUT> {
     /**
      * @param resolve notified if the promise is successfully resolved
      * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenAsync( VoidResolve<OUT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getBackgroundExecutor());
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public <RT> Promise<RT> thenAsync( ResolveVoid<RT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getBackgroundExecutor());
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenAsync( VoidResolveVoid resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getBackgroundExecutor());
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
      * @return a new promise chained by this one
      */
     public <RT,IN> Promise<RT> thenAsync( IResolve<RT,OUT> resolve, IReject reject) {
         return thenAsync(resolve, reject, null);
+    }
+
+
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenAsync( VoidResolve<OUT> resolve, IReject reject) {
+        return thenAsync(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> thenAsync( ResolveVoid<RT> resolve, IReject reject) {
+        return thenAsync(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenAsync( VoidResolveVoid resolve, IReject reject) {
+        return thenAsync(resolve, reject, (IAlways)null);
     }
 
 	/**
@@ -995,6 +1167,36 @@ public class Promise<OUT> {
     public <RT,IN> Promise<RT> thenOnMain( IResolve<RT,OUT> resolve, IReject reject, IAlways always) {
         return then(resolve, reject, always, getMainExecutor());
     }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenOnMain( VoidResolve<OUT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getMainExecutor());
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> thenOnMain( ResolveVoid<RT> resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getMainExecutor());
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @param always notified regardless of the outcome
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenOnMain( VoidResolveVoid resolve, IReject reject, IAlways always) {
+        return then(resolve, reject, always, getMainExecutor());
+    }
 
     /**
      * @param resolve notified if the promise is successfully resolved
@@ -1002,7 +1204,34 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public <RT,IN> Promise<RT> thenOnMain( IResolve<RT,OUT> resolve, IReject reject) {
-        return thenAsync(resolve, reject, null);
+        return thenOnMain(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenOnMain( VoidResolve<OUT> resolve, IReject reject) {
+        return thenOnMain(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public <RT,IN> Promise<RT> thenOnMain( ResolveVoid<RT> resolve, IReject reject) {
+        return thenOnMain(resolve, reject, (IAlways)null);
+    }
+    
+    /**
+     * @param resolve notified if the promise is successfully resolved
+     * @param reject notified if the promise is rejected
+     * @return a new promise chained by this one
+     */
+    public Promise<Void> thenOnMain( VoidResolveVoid resolve, IReject reject) {
+        return thenOnMain(resolve, reject, (IAlways)null);
     }
 	
 	/**
@@ -1074,7 +1303,7 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
      */
     public Promise<Void> always( IAlways always, Executor exe ) {
-        return this.then(null, null, always, exe);
+        return this.then((IResolve<Void,OUT>)null, null, always, exe);
     }
 
 	/**
@@ -1107,8 +1336,8 @@ public class Promise<OUT> {
      * @return a new promise chained by this one
 	 */
 	public Promise<Throwable> fail(final IReject reject, final Executor exe) {
-        DeferredPromise<Throwable> p = Promise.make();
-        then(null, new IReject() {
+        final DeferredPromise<Throwable> p = Promise.make();
+        then((IResolve<Void,OUT>)null, new IReject() {
             @Override
             public void reject(Throwable t) {
                 reject.reject(t);
@@ -1147,13 +1376,13 @@ public class Promise<OUT> {
 
     /**
      *
-     * @param reject
-     * @param exe
-     * @return
+     * @param reject notified if the promise is rejected
+     * @param exe the executor that will process this promise
+     * @return a new promise chained by this one
      */
     public Promise<Void> failThenAlways(final IReject reject, final Executor exe) {
         final DeferredPromise<Void> rt = Promise.make();
-        then(null, null, new IAlways() {
+        then((IResolve<Void,OUT>)null, reject, new IAlways() {
             @Override
             public void always() {
                 rt.resolvePromise(null);
