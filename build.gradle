@@ -1,6 +1,13 @@
 apply plugin: 'java'
 
+version="0.3." + (System.getenv("BUILD_NUMBER") as Integer ?: 0)
+
+repositories {
+    jcenter()
+}
+
 dependencies {
+    testCompile 'junit:junit:4.12'
     compile fileTree(dir: 'libs', include: ['*.jar'])
 }
 
