@@ -1,11 +1,22 @@
 package com.inmotionsoftware.promise.test;
 
+import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.inmotionsoftware.promise.Promise;
 import com.inmotionsoftware.promise.Promise.IDeferred;
 
 public class TestPromise extends PromiseTestCase {
+
+    private class EmptyResolve implements Promise.VoidResolveVoid {
+        public void resolve() {}
+    }
+
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+    }
 
 	@Test
 	public void testAlways() {
@@ -36,15 +47,26 @@ public class TestPromise extends PromiseTestCase {
 		
 		final Throwable[] err = new Throwable[] {null};
 		return Promise.resolve("String")
-		.thenAsync( (String result) -> {
-			return result;
-        }).thenOnMain( (String result) -> {
-        	// return null promise
-            return (Promise<Void>)null;
-        }).fail( (Throwable t) -> {
-        	err[0] = t;
-        }).always( () -> {
-            assertNotNull(err[0]);
+		.thenAsync( new Promise.IResolve<String,String>() {
+			@Override
+			public String resolve(String result) {
+				return result;
+			}
+        }).thenOnMain( new Promise.PromiseHandler<Void,String>() {
+			@Override
+			public Promise<Void> resolve(String result) {
+				return null;
+			}
+
+        }).fail( new Promise.IReject() {
+            @Override
+            public void reject(Throwable t) {
+                err[0] = t;
+            }
+        }).always( new Promise.IAlways() {
+            public void always() {
+                Assert.assertNotNull(err[0]);
+            }
         });
 	}
 	
@@ -52,97 +74,121 @@ public class TestPromise extends PromiseTestCase {
 	@AsyncTest(group = "testAlways")
 	public Promise<Void> testAlwaysCalled() {
 		final boolean[] suc = new boolean[] { false };
-		Promise<Void> p = Promise.resolve().always(() -> {
-			suc[0] = true;
+		Promise<Void> p = Promise.resolve().always( new Promise.IAlways () {
+            public void always() {
+                suc[0] = true;
+            }
 		});
-		assertTrue(suc[0]);
+        Assert.assertTrue(suc[0]);
 		return p;
 	}
 
 	@AsyncTest(group = "testAlways")
 	public Promise<Void> testAlwaysAsync() {
 		return Promise.resolve()
-			.thenAsync(() -> {})
-			.always(() -> {
-				assertIsBackgroundThread();
+			.thenAsync(new EmptyResolve())
+			.always(new Promise.IAlways() {
+                public void always() {
+                    assertIsBackgroundThread();
+                }
 		});
 	}
 
 	@AsyncTest(group = "testAlways")
 	public Promise<Void> testAlwaysOnMain() {
 		return Promise.resolve()
-			.thenOnMain(() -> {})
-			.always(() -> {
-				assertIsMainThread();
+			.thenOnMain(new EmptyResolve())
+			.always(new Promise.IAlways() {
+                public void always() {
+                    assertIsMainThread();
+                }
 		});
 	}
 
 	@AsyncTest(group = "testAlways")
 	public Promise<Void> testAlwaysOnMain2() {
 		return Promise.resolve()
-			.thenAsync(() -> {})
-			.alwaysOnMain(() -> {
-				assertIsMainThread();
+			.thenAsync(new EmptyResolve())
+			.alwaysOnMain(new Promise.IAlways() {
+                public void always() {
+                    assertIsMainThread();
+                }
 		});
 	}
 
 	@AsyncTest(group = "testAlways")
 	public Promise<Void> testAlwaysOnMain3() {
 		return Promise.resolve()
-			.alwaysOnMain(() -> {
-				assertIsMainThread();
+			.alwaysOnMain(new Promise.IAlways() {
+                public void always() {
+                    assertIsMainThread();
+                }
 		});
 	}
 
 	@AsyncTest(group = "testAlways")
 	public Promise<Void> testAlwaysAsync2() {
 		return Promise.resolve()
-			.alwaysAsync(() -> {
-				assertIsBackgroundThread();
+			.alwaysAsync(new Promise.IAlways() {
+                public void always() {
+                    assertIsBackgroundThread();
+                }
 		});
 	}
 	
 	@AsyncTest(group="testFail")
 	public Promise<Throwable> testFailDefaultsToMain() {
 		Exception e = new RuntimeException();
-		return Promise.reject(e).fail((Throwable t) -> {
-			assertIsMainThread();
+		return Promise.reject(e).fail(new Promise.IReject() {
+            public void reject(Throwable t) {
+                assertIsMainThread();
+            }
 		});
 	}
 	
 	@AsyncTest(group="testFail")
 	public Promise<Throwable> testFailOnMain() {
 		Exception e = new RuntimeException();
-		return Promise.reject(e).failOnMain((Throwable t) -> {
-			assertIsMainThread();
+		return Promise.reject(e).failOnMain(new Promise.IReject() {
+            public void reject(Throwable t) {
+                assertIsMainThread();
+            }
 		});
 	}
 
 	@AsyncTest(group="testFail")
 	public Promise<Throwable> testFailAsync() {
 		Exception e = new RuntimeException();
-		return Promise.reject(e).failAsync((Throwable t) -> {
-			assertIsBackgroundThread();
+		return Promise.reject(e).failAsync(new Promise.IReject() {
+            public void reject(Throwable t) {
+                assertIsBackgroundThread();
+            }
 		});
 	}
 	
 	@AsyncTest(group="testFail")
 	public Promise<Throwable> testFailIsCalled() {
-		return Promise.make((IDeferred<Integer> def) -> {
-			throw new RuntimeException();
+		return Promise.make(new Promise.Deferrable<Integer>() {
 
-		}).then( (Integer i) -> {
-			fail(); // shouldn't get here...
+            public void run(IDeferred<Integer> resolve) throws Exception {
+                throw new RuntimeException();
+            }
 
-		}).fail((Throwable t) -> {
-			assertIsMainThread();
-			assertNotNull(t);
+		}).then(new Promise.VoidResolve<Integer>() {
+            public void resolve(Integer i) {
+                Assert.fail(); // shouldn't get here...
+            }
+		}).fail(new Promise.IReject() {
+            public void reject(Throwable t) {
+                assertIsMainThread();
+                Assert.assertNotNull(t);
+            }
 		});
 	}
 	
 	@AsyncTest(group="testAsync")
 	public Promise<Void> testAsyncThen() {
-		Promise<Void> promise = Promise.resolve().thenAsync(()->{});
+		Promise<Void> promise = Promise.resolve().thenAsync(new EmptyResolve());
 
 		try { // give it time to complete
 			Thread.sleep(250);
@@ -150,17 +196,22 @@ public class TestPromise extends PromiseTestCase {
 			e.printStackTrace();
 		}
 
-		return promise.then(()-> {
-			assertIsBackgroundThread();
+		return promise.then(new Promise.VoidResolveVoid() {
+            public void resolve() {
+                assertIsBackgroundThread();
+            }
 		});
 	}
 
 	
 	@AsyncTest(group="testAsync")
 	public Promise<String> testMakeAsync() {
-		return Promise.makeAsync((IDeferred<String> deferred) -> {
-			assertIsBackgroundThread();
-			deferred.resolve("done");
+		return Promise.makeAsync(new Promise.Deferrable<String>() {
+
+            public void run(IDeferred<String> deferred) throws Exception {
+                assertIsBackgroundThread();
+                deferred.resolve("done");
+            }
 		});
 	}
 
@@ -168,18 +219,23 @@ public class TestPromise extends PromiseTestCase {
 	@AsyncTest(group="testAsync")
 	public Promise<Integer> testMakeIsOnMain() {
 		assertIsMainThread();
-		return Promise.make((IDeferred<Integer> deferred) -> {
-			assertIsMainThread();
-			deferred.resolve(1);
+		return Promise.make(new Promise.Deferrable<Integer>() {
+
+            public void run(IDeferred<Integer> deferred) throws Exception {
+                assertIsMainThread();
+                deferred.resolve(1);
+            }
 		});
 	}
 	
 	@AsyncTest(group="testAsync")
 	public Promise<Integer> testMakeOnMain() {
 		assertIsMainThread();
-		return Promise.makeOnMain((IDeferred<Integer> deferred) -> {
-			assertIsMainThread();
-			deferred.resolve(1);
+		return Promise.makeOnMain(new Promise.Deferrable<Integer>() {
+            public void run(IDeferred<Integer> deferred) throws Exception {
+                assertIsMainThread();
+                deferred.resolve(1);
+            }
 		});
 	}
 }

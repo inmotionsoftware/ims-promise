@@ -19,12 +19,13 @@ import com.inmotionsoftware.promise.Promise;
 import com.inmotionsoftware.promise.Promise.AggregateResults;
 import com.inmotionsoftware.promise.util.MainLooper;
 
-import junit.framework.TestCase;;
+import junit.framework.TestCase;;import org.junit.Assert;
+import org.junit.Before;
 
-public class PromiseTestCase extends TestCase {
+ class PromiseTestCase {
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target(ElementType.METHOD) // on class level
-	public @interface AsyncTest {
+	@interface AsyncTest {
 		String group() default "";
 	}
 
@@ -32,21 +33,20 @@ public class PromiseTestCase extends TestCase {
 	private Thread mBG;
 	private ThreadPoolExecutor mPool;
 
-	public void assertIsMainThread() {
-		assertEquals(mMain, Thread.currentThread());
+	void assertIsMainThread() {
+		Assert.assertEquals(mMain, Thread.currentThread());
 	}
 
-	public void assertIsBackgroundThread() {
-		assertEquals(mBG, Thread.currentThread());
+	void assertIsBackgroundThread() {
+		Assert.assertEquals(mBG, Thread.currentThread());
 	}
 	
 	
 	private HashMap<String, Collection<Method>> mPromiseGroup = null;
-	
-	@Override
+
+	@Before
 	protected void setUp() throws Exception {
-		super.setUp();
-		
+
 		mMain = Thread.currentThread();
 		mPool = new ThreadPoolExecutor(1, 1, 99, TimeUnit.DAYS, new LinkedBlockingQueue<Runnable>(), new ThreadFactory() {			
 			@Override
@@ -76,9 +76,9 @@ public class PromiseTestCase extends TestCase {
 	}
 	
 	
-	public void runTests(String group) {
+	void runTests(String group) {
 		
-		MainLooper loop = new MainLooper();
+		final MainLooper loop = new MainLooper();
 		Promise.setMainExecutor(loop);
 		Promise.setBackgroundExecutor(mPool);
 		
@@ -96,7 +96,7 @@ public class PromiseTestCase extends TestCase {
 		if (promises.size() == 0) return;
 		
 		@SuppressWarnings("unchecked")
-		AggregateResults<Object>[] results = new AggregateResults[1];
+		final AggregateResults<Object>[] results = new AggregateResults[1];
 
 		Promise.all(promises)
 		.then(new Promise.Handler<Void,Promise.AggregateResults<Object>>() {
@@ -114,7 +114,7 @@ public class PromiseTestCase extends TestCase {
 			
 			@Override
 			public void reject(Throwable t) {
-				fail();
+				Assert.fail();
 			}
 		});
 
@@ -123,7 +123,7 @@ public class PromiseTestCase extends TestCase {
 		List<Throwable> fails = results[0].getFailures();
 		List<Object> sucs = results[0].getSuccesses();
 		
-		assertTrue(fails.size() == 0);
-		assertEquals(promises.size(), sucs.size());
+		Assert.assertTrue(fails.size() == 0);
+		Assert.assertEquals(promises.size(), sucs.size());
 	}
 }
