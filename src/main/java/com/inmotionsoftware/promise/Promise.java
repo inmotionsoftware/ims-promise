@@ -1282,7 +1282,7 @@ public class Promise<OUT> {
      * @param always notified regardless of the outcome
      * @return a new promise chained by this one
 	 */
-	public Promise<Void> alwaysAsync( IAlways always ) {
+	public Promise<OUT> alwaysAsync( IAlways always ) {
         return this.always(always, getBackgroundExecutor());
 	}
 
@@ -1290,7 +1290,7 @@ public class Promise<OUT> {
      * @param always notified regardless of the outcome
      * @return a new promise chained by this one
 	 */
-	public Promise<Void> alwaysOnMain( IAlways always ) {
+	public Promise<OUT> alwaysOnMain( IAlways always ) {
 		return this.always(always, getMainExecutor());
 	}
 	
@@ -1298,7 +1298,7 @@ public class Promise<OUT> {
      * @param always notified regardless of the outcome
      * @return a new promise chained by this one
 	 */
-	public Promise<Void> always( IAlways always ) {
+	public Promise<OUT> always( IAlways always ) {
 		return this.always(always, null);
 	}
 
@@ -1306,15 +1306,15 @@ public class Promise<OUT> {
      * @param always notified regardless of the outcome
      * @return a new promise chained by this one
      */
-    public Promise<Void> always( IAlways always, Executor exe ) {
-        return this.then((IResolve<Void,OUT>)null, null, always, exe);
+    public Promise<OUT> always( IAlways always, Executor exe ) {
+        return this.then((IResolve<OUT,OUT>)null, null, always, exe);
     }
 
 	/**
      * @param reject notified if the promise is rejected
      * @return a new promise chained by this one
 	 */
-	public Promise<Throwable> failOnMain(final IReject reject) {
+	public Promise<OUT> failOnMain(final IReject reject) {
 		return this.fail(reject, getMainExecutor());
 	}
 	
@@ -1322,7 +1322,7 @@ public class Promise<OUT> {
      * @param reject notified if the promise is rejected
      * @return a new promise chained by this one
 	 */
-	public Promise<Throwable> fail(final IReject reject) {
+	public Promise<OUT> fail(final IReject reject) {
 		return this.fail(reject, null);
 	}
 	
@@ -1330,7 +1330,7 @@ public class Promise<OUT> {
      * @param reject notified if the promise is rejected
      * @return a new promise chained by this one
 	 */
-	public Promise<Throwable> failAsync(final IReject reject) {
+	public Promise<OUT> failAsync(final IReject reject) {
 		return this.fail(reject, getBackgroundExecutor());
 	}
 	
@@ -1339,61 +1339,22 @@ public class Promise<OUT> {
      * @param exe the executor that will process this promise
      * @return a new promise chained by this one
 	 */
-	public Promise<Throwable> fail(final IReject reject, final Executor exe) {
-        final DeferredPromise<Throwable> p = Promise.make();
-        then((IResolve<Void,OUT>)null, new IReject() {
-            @Override
-            public void reject(Throwable t) {
-                reject.reject(t);
-                p.resolvePromise(t);
-            }
-        }, null, exe);
-        return p;
+	public Promise<OUT> fail(final IReject reject, final Executor exe) {
+
+		this.then(new Handler<OUT, OUT>() {
+			@Override
+			public OUT resolve(OUT out) throws Exception {
+				return out;
+			}
+
+			@Override
+			public void reject(Throwable t) {
+				reject.reject(t);
+			}
+		});
+
+		return this;
 	}
-
-    /**
-     *
-     * @param reject notified if the promise is rejected
-     * @return a new promise chained by this one
-     */
-    public Promise<Void> failAsyncThenAlways(final IReject reject) {
-        return failThenAlways(reject, getBackgroundExecutor());
-    }
-
-    /**
-     *
-     * @param reject notified if the promise is rejected
-     * @return a new promise chained by this one
-     */
-    public Promise<Void> failOnMainThenAlways(final IReject reject) {
-        return failThenAlways(reject, getMainExecutor());
-    }
-
-    /**
-     *
-     * @param reject notified if the promise is rejected
-     * @return a new promise chained by this one
-     */
-    public Promise<Void> failThenAlways(final IReject reject) {
-        return failThenAlways(reject, null);
-    }
-
-    /**
-     *
-     * @param reject notified if the promise is rejected
-     * @param exe the executor that will process this promise
-     * @return a new promise chained by this one
-     */
-    public Promise<Void> failThenAlways(final IReject reject, final Executor exe) {
-        final DeferredPromise<Void> rt = Promise.make();
-        then((IResolve<Void,OUT>)null, reject, new IAlways() {
-            @Override
-            public void always() {
-                rt.resolvePromise(null);
-            }
-        }, exe);
-        return rt;
-    }
 
     /**
      *

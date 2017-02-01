@@ -39,22 +39,18 @@ Promise<Integer> p = Promise.reject(exc);
 More advanced uses may require a promise that can be resolved sometime after the promise has been created. This is accomplished by making a new promise with a Deferrable. A Deferrable will pass an IDeferred object which can be used to later resolve or reject the promise.
 
 ```Java
-Promise.make( (IDeferred<String> deferred) -> {
-
-    Runnable r = new Runnable() {			
-        @Override
-        public void run() {
-            try {
-                String res = doSomething();
-                deferred.resolve(res);
-            } catch (Exception e) {
-                deferred.reject(e);
-            }
+final Promise.DeferredPromise<String> promise = Promise.make();
+Runnable r = new Runnable() {
+    @Override
+    public void run() {
+        try {
+            String res = doSomething();
+            deferred.resolvePromise(res);
+        } catch (Exception e) {
+            deferred.rejectPromise(e);
         }
-    };
-
-    new Thread(r).start();		
-});
+    }
+};
 ```
 
 ## Promise Chaining

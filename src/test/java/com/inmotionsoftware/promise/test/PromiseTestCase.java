@@ -27,6 +27,7 @@ import org.junit.Before;
 	@Target(ElementType.METHOD) // on class level
 	@interface AsyncTest {
 		String group() default "";
+        boolean fail() default false;
 	}
 
 	private Thread mMain;
@@ -89,7 +90,35 @@ import org.junit.Before;
 				Object obj = method.invoke(this);
 				@SuppressWarnings("unchecked")
 				Promise<Object> p = (Promise<Object>)obj;
-				promises.add(p);
+
+                boolean fail = false;
+                Annotation ann = method.getAnnotation(AsyncTest.class);
+                if (ann != null) {
+                    AsyncTest async = (AsyncTest)ann;
+                    fail = async.fail();
+                }
+
+                if (!fail) {
+                    promises.add(p);
+                    continue;
+                }
+
+                // handle failed cases
+                final Promise.DeferredPromise<Object> invert = Promise.make();
+                p.then(new Promise.Handler<Object, Object>() {
+                    @Override
+                    public Void resolve(Object o) throws Exception {
+                        invert.rejectPromise(new RuntimeException("Promise was expected to fail, but succeeded"));
+                        return null;
+                    }
+
+                    @Override
+                    public void reject(Throwable t) {
+                        invert.resolvePromise(null);
+                    }
+                });
+                promises.add(invert);
+
 			} catch (Throwable e) {}
 		}
 
