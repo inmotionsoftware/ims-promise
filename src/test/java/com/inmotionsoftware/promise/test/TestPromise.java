@@ -165,6 +165,54 @@ public class TestPromise extends PromiseTestCase {
             }
 		});
 	}
+
+    @AsyncTest(group="testFail", fail=true)
+    public Promise<Void> testRecoverFail() {
+        return Promise.resolve()
+                .then(new Promise.VoidResolveVoid() {
+                    @Override
+                    public void resolve() throws Exception {
+                        throw new RuntimeException();
+                    }
+                })
+                .recover(new Promise.VoidRecover() {
+                    @Override
+                    public void recover(Throwable t) throws Throwable {
+                        throw new NullPointerException();
+                    }
+                })
+                .fail(new Promise.IReject() {
+                    @Override
+                    public void reject(Throwable t) {
+                        Assert.assertEquals(t.getClass(), NullPointerException.class);
+                    }
+                });
+    }
+
+    @AsyncTest(group="testFail", fail=false)
+    public Promise<Void> testRecover() {
+        final Integer val = new Integer(3);
+
+        return Promise.resolve()
+                .then(new Promise.ResolveVoid<Integer>() {
+                    @Override
+                    public Integer resolve() throws Exception {
+                        throw new RuntimeException();
+                    }
+                })
+                .recover(new Promise.IRecover<Integer>() {
+                    @Override
+                    public Integer recover(Throwable t) throws Throwable {
+                        return val;
+                    }
+                })
+                .then(new Promise.VoidResolve<Integer>() {
+                    @Override
+                    public void resolve(Integer integer) throws Exception {
+                        Assert.assertEquals(integer, val);
+                    }
+                });
+    }
 	
 	@AsyncTest(group="testFail", fail=true)
 	public Promise<Void> testFailIsCalled() {
