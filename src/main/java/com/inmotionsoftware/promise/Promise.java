@@ -317,7 +317,9 @@ public class Promise<OUT> {
      */
     private interface IOutComponent<OUT> {
         void addChild(IInComponent<OUT> child);
-
+        boolean isResolved();
+        boolean isRejected();
+        boolean isFulfilled();
         Executor getExecutor();
     }
 
@@ -332,9 +334,22 @@ public class Promise<OUT> {
         private Result<OUT> mResult;
         private final Executor mExecutor;
 
+        public boolean isFulfilled() {
+            return mResult != null;
+        }
+
+        public boolean isResolved() {
+            return mResult != null && mResult.error == null;
+        }
+
+        public boolean isRejected() {
+            return mResult != null && mResult.error != null;
+        }
+
         BaseContinuation(Executor exe) {
             mExecutor = exe;
         }
+
 
         @Override
         public void resolve(final Result<IN> result) {
@@ -553,6 +568,18 @@ public class Promise<OUT> {
     private static Executor gMain;
     private static Executor gBack;
     protected final IOutComponent<OUT> mOut;
+
+    public boolean isResolved() {
+        return mOut.isResolved();
+    }
+
+    public boolean isRejected() {
+        return mOut.isRejected();
+    }
+
+    public boolean isFulfilled() {
+        return mOut.isFulfilled();
+    }
 
     /**
      * @return the register executor for the main thread
