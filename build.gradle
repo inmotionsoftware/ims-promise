@@ -1,14 +1,22 @@
 apply plugin: 'java'
+apply plugin: "kotlin"
 
 version="0.3." + (System.getenv("BUILD_NUMBER") as Integer ?: 0)
 
 repositories {
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
-    testCompile 'junit:junit:4.12'
     compile fileTree(dir: 'libs', include: ['*.jar'])
+    testCompile 'junit:junit:4.12'
+    compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+}
+
+sourceSets {
+    main.kotlin.srcDirs += 'src/main/java'
+    main.java.srcDirs += 'src/main/java'
 }
 
 sourceCompatibility = "1.7"
