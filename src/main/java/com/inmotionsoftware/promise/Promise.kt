@@ -184,10 +184,17 @@ open class Promise<OUT> {
     val isRejected: Boolean get() = this.output.isRejected
     val isResolved: Boolean get() = this.output.isResolved
 
-    constructor(execute: ((OUT) -> Unit, (Throwable) -> Unit) -> Unit) {
+    constructor(on: Executor? = null, execute: ((OUT) -> Unit, (Throwable) -> Unit) -> Unit) {
         val cont = DeferredContinuation<OUT>()
-        execute({ cont.resolve(it) }, { cont.reject(it) })
         this.output = cont
+
+        if (on != null) {
+            on.run {
+                execute({ cont.resolve(it) }, { cont.reject(it) })
+            }
+        } else {
+            execute({ cont.resolve(it) }, { cont.reject(it) })
+        }
     }
 
     private constructor(output: Output<OUT>) {
@@ -202,35 +209,35 @@ open class Promise<OUT> {
         this.output = ResolvedContinuation(Result.Rejected(error))
     }
 
-    fun recover(on: Executor? = null, execute: (Throwable) -> OUT): Promise<OUT> {
+    fun recover(on: Executor?, execute: (Throwable) -> OUT): Promise<OUT> {
         val cont = RecoverContinuation(on, execute)
         this.output.add(cont)
         return Promise(cont)
     }
 
-    fun <T> then(on: Executor? = null, execute: (OUT) -> T): Promise<T> {
+    fun <T> then(on: Executor?, execute: (OUT) -> T): Promise<T> {
         val cont = BasicContinuation(on, execute)
         this.output.add(cont)
         return Promise(cont)
     }
 
-    fun catch(on: Executor? = null, execute: (Throwable) -> Unit): Promise<OUT> {
+    fun catch(on: Executor?, execute: (Throwable) -> Unit): Promise<OUT> {
         val cont = ErrorContinuation<OUT>(on, execute)
         this.output.add(cont)
         return this
     }
 
-    fun always(on: Executor? = null, execute: () -> Unit ): Promise<OUT> {
+    fun always(on: Executor?, execute: () -> Unit ): Promise<OUT> {
         val cont = AlwaysContinuation<OUT>(on, execute)
         this.output.add(cont)
         return this
     }
 
-    fun asVoid(): Promise<Unit> {
-        return this.then { Unit }
+    fun asVoid(on: Executor?): Promise<Unit> {
+        return this.then(on=on) { Unit }
     }
 
-    fun <T> thenp(on: Executor? = null, execute: (OUT) -> Promise<T>): Promise<T> {
+    fun <T> thenp(on: Executor?, execute: (OUT) -> Promise<T>): Promise<T> {
         return Promise { resolve, reject ->
             Unit
             this.then(on = on, execute = execute)
@@ -240,7 +247,7 @@ open class Promise<OUT> {
         }
     }
 
-    fun recoverp(on: Executor? = null, execute: (Throwable) -> Promise<OUT>): Promise<OUT> {
+    fun recoverp(on: Executor?, execute: (Throwable) -> Promise<OUT>): Promise<OUT> {
         return Promise { resolve, reject ->
             Unit
             this.then(on = null) { resolve(it) }
@@ -282,17 +289,17 @@ class DeferredPromise<T> {
     }
 }
 
-fun <T> join(promises: Collection<Promise<T>>): Promise<Collection<T>> {
+fun <T> join(on: Executor?, promises: Collection<Promise<T>>): Promise<Collection<T>> {
     return Promise<Collection<T>>{ resolve, reject ->
         var count = promises.count()
-        var results = mutableListOf<T>()
+        val results = mutableListOf<T>()
         promises.forEach {
-            it.then {
+            it.then(on=on) {
                 results.add(it)
                 if (count-- == 0) {
                     resolve(results)
                 }
-            }.catch { reject(it) }
+            }.catch(on=on) { reject(it) }
         }
     }
 }
