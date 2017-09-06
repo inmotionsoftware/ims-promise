@@ -30,7 +30,9 @@ open class Promise<OUT> {
     }
 
     protected abstract class Continuation<IN, OUT>(private val executor: Executor?) : Input<IN>, Output<OUT> {
-        private val children: MutableList<Input<OUT>> = mutableListOf()
+        private val children: MutableList<Input<OUT>> by lazy {
+            mutableListOf<Input<OUT>>()
+        }
 
         override val isRejected: Boolean
             get() = when (this.result) {
@@ -57,15 +59,20 @@ open class Promise<OUT> {
             get() = synchronized(this) { return field }
             set(value) {
                 if (value == null) throw NullPointerException()
-                val list: MutableList<Input<OUT>> = mutableListOf()
-                synchronized(this) {
-                    // cannot set twice
+
+                val list = synchronized(this) {
                     if (field != null) { throw PromiseFulfilledException() }
                     field = value
-                    list.addAll(this.children)
-                    this.children.clear()
+                    if (this.children.size > 0) {
+                        val list = mutableListOf<Input<OUT>>()
+                        list.addAll(this.children)
+                        this.children.clear()
+                        list
+                    } else {
+                        null
+                    }
                 }
-                list.forEach { it.resolve(value) }
+                list?.forEach { it.resolve(value) }
             }
 
         private fun execute(value: IN): Result<OUT> {
@@ -83,15 +90,22 @@ open class Promise<OUT> {
 
         override fun resolve(result: Result<IN>) {
             fun run() {
-                when (result) {
-                    is Result.Resolved -> this.result = execute(result.value)
-                    is Result.Rejected -> this.result = recover(result.error)
+                try {
+                    when (result) {
+                        is Result.Resolved -> this.result = execute(result.value)
+                        is Result.Rejected -> this.result = recover(result.error)
+                    }
+                } catch (t: PromiseFulfilledException) {
+                    // do nothing
+                } catch (t: Throwable) {
+                    this.result = Result.Rejected(t)
+                } finally {
+                    always()
                 }
-                always()
             }
 
             if (executor != null) {
-                executor.run{ run() }
+                executor.execute{ run() }
             } else {
                 run()
             }
@@ -102,17 +116,18 @@ open class Promise<OUT> {
         open fun recover(error: Throwable): Result<OUT> = Result.Rejected(error)
 
         override fun add(child: Input<OUT>) {
-            var result = this.result
-            synchronized(this) {
-                if (this.result != null) {
-                   result = this.result
+            val rt = synchronized(this) {
+                val result = this.result
+                if (result != null) {
+                    result
                 } else {
                     children.add(child)
+                    null
                 }
             }
 
-            if (result != null) {
-                child.resolve(result!!)
+            if (rt != null) {
+                child.resolve(rt)
             }
         }
     }
@@ -137,8 +152,11 @@ open class Promise<OUT> {
         override fun dispatch(value: T) {}
 
         override fun recover(error: Throwable): Result<Unit> {
-            execute(error)
-            return Result.Rejected(error)
+            try {
+                execute(error)
+            } finally {
+                return Result.Rejected(error)
+            }
         }
     }
 
@@ -146,7 +164,7 @@ open class Promise<OUT> {
         override fun dispatch(value: T) {}
 
         override fun always() {
-            execute()
+            try { execute() } catch (t: Throwable) {}
         }
     }
 
@@ -189,7 +207,7 @@ open class Promise<OUT> {
         this.output = cont
 
         if (on != null) {
-            on.run {
+            on.execute {
                 execute({ cont.resolve(it) }, { cont.reject(it) })
             }
         } else {
@@ -240,20 +258,22 @@ open class Promise<OUT> {
     fun <T> thenp(on: Executor?, execute: (OUT) -> Promise<T>): Promise<T> {
         return Promise { resolve, reject ->
             Unit
-            this.then(on = on, execute = execute)
-                    .then(on = null) {
-                        it.then(on = null) { resolve(it) }.catch(on = null) { reject(it) }
-                    }
+            this.then(on=on, execute=execute)
+                .then(on=null) { it.then(on=null) {resolve(it)}.catch(on = null) {reject(it)} }
+                .catch(on=null) { reject(it) }
         }
     }
 
     fun recoverp(on: Executor?, execute: (Throwable) -> Promise<OUT>): Promise<OUT> {
-        return Promise { resolve, reject ->
-            Unit
-            this.then(on = null) { resolve(it) }
-                    .catch(on = on) {
-                        execute(it).then(on = null) { resolve(it) }.catch(on = null) { reject(it) }
-                    }
+        return Promise{ resolve, reject ->
+            this.then(on=null) {resolve(it)}
+            .catch(on=on) {
+                try {
+                    execute(it).then(on=null) {resolve(it)}.catch(on=null) {reject(it)}
+                } catch (t: Throwable) {
+                    reject(it)
+                }
+            }
         }
     }
 
