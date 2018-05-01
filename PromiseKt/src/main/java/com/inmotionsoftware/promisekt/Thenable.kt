@@ -57,7 +57,7 @@ fun <T, U> Thenable<T>.compactMap(on: Executor? = conf.Q.map, transform: (T) -> 
             is Result.fulfilled -> {
                 on.async {
                     try {
-                        val rv = transform(it.value)
+                        val rv = try { transform(it.value) } catch (e: Exception) { null }
                         if (rv != null) {
                             rp.box.seal(Result.fulfilled(rv))
                         } else {
@@ -143,19 +143,25 @@ val <T> Thenable<T>.value: T? get() {
 
 // Thenable where T: Collection
 
-fun <T: Collection<T>, U> Thenable<T>.mapValues(on: Executor? = conf.Q.map, transform: (T) -> U): Promise<List<U>> {
+fun <E, T: Collection<E>, U> Thenable<T>.mapValues(on: Executor? = conf.Q.map, transform: (E) -> U): Promise<List<U>> {
     return map(on = on){ it.map(transform) }
 }
 
-fun <T: Collection<T>, U> Thenable<T>.flatMapValues(on: Executor? = conf.Q.map, transform: (T) -> Iterable<U>): Promise<List<U>> {
+fun <E, T: Collection<E>, U> Thenable<T>.flatMapValues(on: Executor? = conf.Q.map, transform: (E) -> U?): Promise<List<U>> {
     return map(on = on) { foo ->
-        foo.flatMap { transform(it) }
+        foo.flatMap {
+            val value = transform(it)
+            if (value != null) listOf(value) else listOf()
+        }
     }
 }
-
-fun <T: Collection<T>, U> Thenable<T>.compactMapValues(on: Executor? = conf.Q.map, transform: (T) -> Iterable<U>): Promise<List<U>> {
+g
+fun <E, T: Collection<E>, U> Thenable<T>.compactMapValues(on: Executor? = conf.Q.map, transform: (E) -> U?): Promise<List<U>> {
     return map(on = on) { foo ->
-        foo.flatMap(transform)
+        foo.flatMap {
+            val value = transform(it)
+            if (value != null) listOf(value) else listOf()
+        }
     }
 }
 
@@ -164,11 +170,11 @@ fun <T: Collection<T>, U> Thenable<T>.compactMapValues(on: Executor? = conf.Q.ma
 //    }
 //}
 
-fun <T: Collection<T>> Thenable<T>.filterValues(on: Executor? = conf.Q.map, isIncluded: (T) -> Boolean): Promise<List<T>> {
+fun <E, T: Collection<E>> Thenable<T>.filterValues(on: Executor? = conf.Q.map, isIncluded: (E) -> Boolean): Promise<List<E>> {
     return map(on = on) { it.filter(isIncluded)}
 }
 
-val <T: Collection<T>> Thenable<T>.firstValue: Promise<T>
+val <E, T: Collection<E>> Thenable<T>.firstValue: Promise<E>
     get() {
     return map(on = null) { aa ->
         try {
@@ -179,7 +185,7 @@ val <T: Collection<T>> Thenable<T>.firstValue: Promise<T>
     }
 }
 
-val <T: Collection<T>> Thenable<T>.lastValue: Promise<T>
+val <E, T: Collection<E>> Thenable<T>.lastValue: Promise<E>
     get() {
     return map(on = null) { aa ->
         try {
@@ -190,6 +196,6 @@ val <T: Collection<T>> Thenable<T>.lastValue: Promise<T>
     }
 }
 
-fun <E: Comparable<E>, T: Collection<T>> Thenable<T>.sortedValues(on: Executor? = conf.Q.map, selector: (T) -> E?): Promise<List<T>> {
+fun <E: Comparable<E>, T: Collection<E>> Thenable<T>.sortedValues(on: Executor? = conf.Q.map, selector: (E) -> E?): Promise<List<E>> {
     return map(on = on) { it.sortedBy(selector) }
 }
