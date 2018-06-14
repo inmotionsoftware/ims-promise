@@ -2,11 +2,17 @@ package com.inmotionsoftware.promisekt
 
 import java.util.concurrent.Executor
 
-object PMKConfiguration {
-    data class Value(val map: Executor?, val `return`: Executor?)
+object PMKConfiguration : PMKConfig {
 
-    var Q: Value = Value(map = DispatchExecutor.main, `return` = DispatchExecutor.main)
-    var catchPolicy: CatchPolicy = CatchPolicy.allErrorsExceptCancellation
+    override var Q: PMKConfig.Value = PMKConfig.Value(map = DispatchExecutor.main, `return` = DispatchExecutor.main)
+    override var catchPolicy: CatchPolicy = CatchPolicy.allErrorsExceptCancellation
 }
 
-var conf = PMKConfiguration
+var conf: PMKConfig = PMKConfiguration
+
+interface PMKConfig {
+    data class Value(val map: Executor?, val `return`: Executor?)
+
+    var Q: Value
+    var catchPolicy: CatchPolicy
+}

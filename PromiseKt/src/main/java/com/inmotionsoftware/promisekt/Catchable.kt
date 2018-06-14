@@ -20,7 +20,7 @@ interface CatchMixin<T>: Thenable<T>
  * @param body: The handler to execute if this promise is rejected.
  * @return A promise finalizer.
  */
-fun <T> CatchMixin<T>.catch(on: Executor? = PMKConfiguration.Q.`return`, policy: CatchPolicy = PMKConfiguration.catchPolicy, body: (Throwable) -> Unit): PMKFinalizer {
+fun <T> CatchMixin<T>.catch(on: Executor? = conf.Q.`return`, policy: CatchPolicy = conf.catchPolicy, body: (Throwable) -> Unit): PMKFinalizer {
     val finalizer = PMKFinalizer()
     pipe {
         when (it) {
@@ -68,7 +68,7 @@ class PMKFinalizer {
  * @param on: The executor to which the provided closure dispatches.
  * @param body: The handler to execute if this promise is rejected.
  */
-fun <T, U: Thenable<T>> CatchMixin<T>.recover(on: Executor? = PMKConfiguration.Q.map, policy: CatchPolicy = PMKConfiguration.catchPolicy, body: (Throwable) -> U): Promise<T> {
+fun <T, U: Thenable<T>> CatchMixin<T>.recover(on: Executor? = conf.Q.map, policy: CatchPolicy = conf.catchPolicy, body: (Throwable) -> U): Promise<T> {
     val rp = Promise<T>(PMKUnambiguousInitializer.pending)
     pipe {
         when (it) {
@@ -104,7 +104,7 @@ fun <T, U: Thenable<T>> CatchMixin<T>.recover(on: Executor? = PMKConfiguration.Q
  * @param on: The executor to which the provided closure dispatches.
  * @param body: The handler to execute if this promise is rejected.
  */
-fun <T> CatchMixin<T>.recoverGuarantee(on: Executor? = PMKConfiguration.Q.map, body: (Throwable) -> Guarantee<T>): Guarantee<T> {
+fun <T> CatchMixin<T>.recoverGuarantee(on: Executor? = conf.Q.map, body: (Throwable) -> Guarantee<T>): Guarantee<T> {
     val rg = Guarantee<T>(PMKUnambiguousInitializer.pending)
     pipe {
         when (it) {
@@ -138,7 +138,7 @@ fun <T> CatchMixin<T>.recoverGuarantee(on: Executor? = PMKConfiguration.Q.map, b
  * @param body: The closure that executes when this promise resolves.
  * @return A new promise, resolved with this promise’s resolution.
  */
-fun <T> CatchMixin<T>.ensure(on: Executor? = PMKConfiguration.Q.`return`, body: () -> Unit): Promise<T> {
+fun <T> CatchMixin<T>.ensure(on: Executor? = conf.Q.`return`, body: () -> Unit): Promise<T> {
     val rp = Promise<T>(PMKUnambiguousInitializer.pending)
     pipe { result ->
         on.async {
@@ -167,7 +167,7 @@ fun <T> CatchMixin<T>.ensure(on: Executor? = PMKConfiguration.Q.`return`, body: 
  * @param body: The closure that executes when this promise resolves.
  * @return A new promise, resolved with this promise’s resolution.
  */
-fun <T> CatchMixin<T>.ensureThen(on: Executor? = PMKConfiguration.Q.`return`, body: () -> Guarantee<Unit>): Promise<T> {
+fun <T> CatchMixin<T>.ensureThen(on: Executor? = conf.Q.`return`, body: () -> Guarantee<Unit>): Promise<T> {
     val rp = Promise<T>(PMKUnambiguousInitializer.pending)
     pipe { result ->
         on.async {
