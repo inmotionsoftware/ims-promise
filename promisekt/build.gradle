@@ -1,0 +1,10 @@
+apply plugin: 'kotlin'
+
+group 'com.inmotionsoftware'
+version '1.0-SNAPSHOT'
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.2.51'
+    testImplementation 'junit:junit:4.12'
+}

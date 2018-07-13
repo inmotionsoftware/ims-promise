@@ -1,23 +1,16 @@
-apply plugin: 'java'
-apply plugin: "kotlin"
-
-version="0.3." + (System.getenv("BUILD_NUMBER") as Integer ?: 0)
-
-repositories {
-    mavenCentral()
+//Root Build File for shared project settings
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.51"
+    }
 }
 
-dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
-    testCompile 'junit:junit:4.12'
-    compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+allprojects {
+    repositories {
+        mavenLocal()
+        jcenter()
+    }
 }
-
-sourceSets {
-    main.kotlin.srcDirs += 'src/main/java'
-    main.java.srcDirs += 'src/main/java'
-}
-
-sourceCompatibility = "1.7"
-targetCompatibility = "1.7"
