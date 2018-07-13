@@ -1,16 +1,68 @@
 //Root Build File for shared project settings
 buildscript {
     repositories {
+        google()
         jcenter()
     }
     dependencies {
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.51"
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.51'
+        classpath 'org.jfrog.buildinfo:build-info-extractor-gradle:4.5.4'
     }
 }
 
 allprojects {
+    apply plugin: 'com.jfrog.artifactory'
+    apply plugin: 'maven-publish'
     repositories {
-        mavenLocal()
+        google()
         jcenter()
+    }
+}
+
+artifactoryPublish.skip = true
+
+project('promisekt') {
+    artifactoryPublish.dependsOn('build')
+    publishing {
+        publications {
+            jar(MavenPublication) {
+                groupId = group
+                artifactId = project.getName()
+                version = currentVersion
+                // Tell maven to prepare the generated "*.jar" file for publishing
+                artifact("$buildDir/libs/${project.getName()}-${distVersion}.jar")
+            }
+        }
+    }
+
+    artifactoryPublish {
+        publications(publishing.publications.jar)
+    }
+}
+
+artifactory {
+    contextUrl = distContextUrl
+    publish {
+        repository {
+            repoKey = 'libs-snapshot-local' // The Artifactory repository key to publish to
+            username = "${artifactory_user}" // The publisher user name
+            password = "${artifactory_password}" // The publisher password
+            // This is an optional section for configuring Ivy publication (when publishIvy = true).
+            ivy {
+                ivyLayout = '[organization]/[module]/ivy-[revision].xml'
+                artifactLayout = '[organization]/[module]/[revision]/[module]-[revision](-[classifier]).[ext]'
+                mavenCompatible = true
+                //Convert any dots in an [organization] layout value to path separators, similar to Maven's groupId-to-path conversion. True if not specified
+            }
+        }
+        defaults {
+            // Reference to Gradle publications defined in the build script.
+            // This is how we tell the Artifactory Plugin which artifacts should be
+            // published to Artifactory.
+            publishArtifacts = true
+            // Properties to be attached to the published artifacts.
+            properties = ['qa.level': 'basic', 'dev.team': 'core']
+            publishPom = true // Publish generated POM files to Artifactory (true by default)
+        }
     }
 }
