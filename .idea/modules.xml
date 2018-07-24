@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/ims-promise.iml" filepath="$PROJECT_DIR$/ims-promise.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ims-promise.iml" filepath="$PROJECT_DIR$/.idea/modules/ims-promise.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/promisekt/promisekt.iml" filepath="$PROJECT_DIR$/.idea/modules/promisekt/promisekt.iml" />
     </modules>
   </component>
