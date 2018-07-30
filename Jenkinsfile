@@ -50,15 +50,6 @@ pipeline {
             '''
           }
         }
-        stage('echo env') {
-          steps {
-            sh '''#!/bin/bash
-            echo "url = $ARTIFACTORY_URL"
-            echo "username = $ARTIFACTORY_USR"
-            echo "password = $ARTIFACTORY_PSW"
-            '''
-          }
-        }
       }
     }
     stage('Clone promisekt') {
@@ -79,7 +70,7 @@ pipeline {
     stage('Build APK') {
       steps {
         dir('promisekt') {
-          sh './gradlew promisekt:artifactoryPublish'
+          sh './gradlew clean promisekt:artifactoryPublish -Partifactory.url=$ARTIFACTORY_URL -Partifactory.user=$ARTIFACTORY_USR -Partifactory.password=$ARTIFACTORY_PSW'
           archiveArtifacts '**/*.apk'
         }
       }
