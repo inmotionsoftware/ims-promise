@@ -62,7 +62,7 @@ pipeline {
     stage('Unit test') {
       steps {
         dir('promisekt') {
-          sh './gradlew test'
+          sh './gradlew clean test --info'
           archiveArtifacts '**/TEST-*.xml'
         }
       }
@@ -78,8 +78,15 @@ pipeline {
     stage('Static analysis') {
       steps {
         dir('promisekt') {
-          sh './gradlew promisekt:detektCheck'
-          archiveArtifacts 'reports/*.*'
+          script {
+            try {
+              sh './gradlew promisekt:detektCheck --continue'
+            } catch (Exception error) {
+              echo 'Linting error occurred'
+            } finally {
+              archiveArtifacts '**/reports/*'
+            }
+          }
         }
       }
     }

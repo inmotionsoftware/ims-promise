@@ -16,13 +16,15 @@ class WhenTests: AsyncTests() {
         class test3: TestError("Test Error 3")
     }
 
+    private val waitTime: Long = 20
+
     @Test
     fun testEmpty() {
         val e = CountDownLatch(2)
         val promises: Iterable<Promise<Unit>> = emptyList()
         whenFulfilled(promises).done { e.countDown() }
         whenResolved(promises).done { e.countDown() }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
     @Test
@@ -41,7 +43,7 @@ class WhenTests: AsyncTests() {
             assertEquals(4, values[3])
             e.countDown()
         }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
     @Test
@@ -60,7 +62,7 @@ class WhenTests: AsyncTests() {
             assertEquals(4, values[3])
             e.countDown()
         }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
     @Test
@@ -73,7 +75,7 @@ class WhenTests: AsyncTests() {
             assertEquals(pair.second, "abc")
             e.countDown()
         }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
     @Test
@@ -88,7 +90,7 @@ class WhenTests: AsyncTests() {
             assertEquals(triple.third, 1.0, 0.01)
             e.countDown()
         }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
     @Test
@@ -100,7 +102,7 @@ class WhenTests: AsyncTests() {
         val p4 = Promise.value(4).done { }
 
         whenFulfilled(arrayListOf(p1, p2, p3, p4)).done { e.countDown() }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
     @Test
@@ -116,7 +118,7 @@ class WhenTests: AsyncTests() {
             assertTrue(error == test1)
             e.countDown()
         }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
     @Test
@@ -124,7 +126,7 @@ class WhenTests: AsyncTests() {
         val e = CountDownLatch(2)
         whenGuarantee(Guarantee.value(Unit), Guarantee.value(Unit)).done { e.countDown() }
         whenGuarantee(arrayListOf(Guarantee.value(Unit), Guarantee.value(Unit))).done { e.countDown() }
-        wait(countDown = e, timeout = 10)
+        wait(countDown = e, timeout = waitTime)
     }
 
 }
