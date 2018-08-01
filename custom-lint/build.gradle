@@ -1,0 +1,18 @@
+apply plugin: 'java'
+
+dependencies {
+    implementation 'com.android.tools.lint:lint-api:+'
+    implementation 'com.android.tools.lint:lint-checks:+'
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+jar {
+    manifest {
+        attributes(
+                'Manifest-Version': '1.0',
+                'Lint-Registry': 'com.inmotionsoftware.android.lint.JavaPerformanceIssueRegistry'
+        )
+    }
+}
+
+defaultTasks 'assemble'
