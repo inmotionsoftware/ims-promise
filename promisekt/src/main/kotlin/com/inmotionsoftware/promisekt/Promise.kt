@@ -5,7 +5,7 @@ import java.util.concurrent.CountDownLatch
 /**
  * A `Promise` is a functional abstraction around a failable asynchronous operation.
  */
-class Promise<T>: Thenable<T>, CatchMixin<T> {
+class Promise<T> : Thenable<T>, CatchMixin<T> {
     internal val box: Box<Result<T>>
 
     internal constructor(box: SealedBox<Result<T>>) {
@@ -125,7 +125,7 @@ fun <T> Promise<T>.wait(): T {
     }
 }
 
-/// used by our extensions to provide unambiguous functions with the same name as the original function
+// / used by our extensions to provide unambiguous functions with the same name as the original function
 enum class PMKNamespacer {
     promise
 }

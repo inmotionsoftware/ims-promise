@@ -3,8 +3,8 @@ package com.inmotionsoftware.promisekt
 import java.util.*
 
 sealed class Sealant<R> {
-    class pending<R>(val handlers: Handlers<R>): Sealant<R>()
-    class resolved<R>(val value: R): Sealant<R>()
+    class pending<R>(val handlers: Handlers<R>) : Sealant<R>()
+    class resolved<R>(val value: R) : Sealant<R>()
 }
 
 class Handlers<R> {
@@ -18,7 +18,7 @@ interface Box<T> {
     fun seal(value: T)
 }
 
-internal class SealedBox<T>(val value: T): Box<T> {
+internal class SealedBox<T>(val value: T) : Box<T> {
     override fun inspect(): Sealant<T> {
         return Sealant.resolved(value = this.value)
     }
@@ -27,7 +27,7 @@ internal class SealedBox<T>(val value: T): Box<T> {
     override fun seal(value: T) { throw IllegalStateException() }
 }
 
-class EmptyBox<T>: Box<T> {
+class EmptyBox<T> : Box<T> {
     private var sealant: Sealant<T> = Sealant.pending(Handlers<T>())
 
     override fun seal(value: T) {
@@ -47,20 +47,20 @@ class EmptyBox<T>: Box<T> {
             }
         }
 
-        //FIXME we are resolved so should `pipe(to:)` be called at this instant, “thens are called in order” would be invalid
-        //NOTE we don’t do this in the above `sync` because that could potentially deadlock
-        //THOUGH since `then` etc. typically invoke after a run-loop cycle, this issue is somewhat less severe
+        // FIXME we are resolved so should `pipe(to:)` be called at this instant, “thens are called in order” would be invalid
+        // NOTE we don’t do this in the above `sync` because that could potentially deadlock
+        // THOUGH since `then` etc. typically invoke after a run-loop cycle, this issue is somewhat less severe
         handlers?.let {
             it.bodies.forEach { it(value) }
         }
 
-        //TODO solution is an unfortunate third state “sealed” where then's get added
+        // TODO solution is an unfortunate third state “sealed” where then's get added
         // to a separate handler pool for that state
         // any other solution has potential races
     }
 
     override fun inspect(): Sealant<T> {
-        return synchronized(lock = this) { this.sealant  }
+        return synchronized(lock = this) { this.sealant }
     }
 
     override fun inspect(sealant: (Sealant<T>) -> Unit) {

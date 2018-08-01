@@ -43,7 +43,7 @@ internal fun <T> Executor?.async(namespace: PMKNamespacer, body: () -> T): Promi
     async {
         try {
             promise.box.seal(Result.fulfilled(body()))
-        } catch( e: Throwable) {
+        } catch ( e: Throwable) {
             promise.box.seal(Result.rejected(e))
         }
     }

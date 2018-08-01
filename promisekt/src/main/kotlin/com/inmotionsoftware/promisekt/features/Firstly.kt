@@ -28,7 +28,7 @@ import com.inmotionsoftware.promisekt.Thenable
  *
  * Note: the block you pass excecutes immediately on the current thread/queue.
  */
-fun <T, U: Thenable<T>> firstly(body: () -> U): Promise<T> {
+fun <T, U : Thenable<T>> firstly(body: () -> U): Promise<T> {
     return try {
         val rp = Promise<T>(PMKUnambiguousInitializer.pending)
         body().pipe(to = rp.box::seal )
@@ -41,6 +41,6 @@ fun <T, U: Thenable<T>> firstly(body: () -> U): Promise<T> {
 /**
  * Same as `firstly` but resolves in a Guarantee.
  */
-fun <T, U: Guarantee<T>> firstlyGuarantee(body: () -> U): Guarantee<T> {
+fun <T, U : Guarantee<T>> firstlyGuarantee(body: () -> U): Guarantee<T> {
     return body()
 }

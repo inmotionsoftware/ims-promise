@@ -1,4 +1,20 @@
+plugins {
+    id 'io.gitlab.arturbosch.detekt' version '1.0.0.RC8'
+}
+
 apply plugin: 'kotlin'
+
+detekt {
+    version = '1.0.0.RC8'
+    defaultProfile {
+        input = file("src/main/kotlin")
+//        config = file("detekt.yml")
+        filters = ".*/resources/.*,.*/tmp/.*"
+        output = file("reports")
+        outputName = "detekt-report"
+        baseline = file("reports/baseline.xml")
+    }
+}
 
 version distVersion
 
@@ -6,4 +22,5 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.2.51'
     testImplementation 'junit:junit:4.12'
+    detekt 'io.gitlab.arturbosch.detekt:detekt-formatting:1.0.0.RC8'
 }

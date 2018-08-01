@@ -28,7 +28,7 @@ interface Thenable<T> {
  *      //…
  *   }
  */
-fun <T, U: Thenable<T>> Thenable<T>.then(on: Executor? = conf.Q.map, body: (T) -> U): Promise<T> {
+fun <T, U : Thenable<T>> Thenable<T>.then(on: Executor? = conf.Q.map, body: (T) -> U): Promise<T> {
     val rp = Promise<T>(PMKUnambiguousInitializer.pending)
     pipe {
         when (it) {
@@ -91,7 +91,7 @@ fun <T, U> Thenable<T>.map(on: Executor? = conf.Q.map, transform: (T) -> U): Pro
     return rp
 }
 
-fun <T, U, TU: Thenable<U>> Thenable<T>.thenMap(on: Executor? = conf.Q.map, body: (T) -> TU): Promise<U> {
+fun <T, U, TU : Thenable<U>> Thenable<T>.thenMap(on: Executor? = conf.Q.map, body: (T) -> TU): Promise<U> {
     val rp = Promise<U>(PMKUnambiguousInitializer.pending)
     pipe {
         when (it) {
@@ -290,8 +290,8 @@ inline val <T> Thenable<T>.value: T? get() {
  *      // it => [2,4,6]
  *   }
  */
-inline fun <E, T: Iterable<E>, U> Thenable<T>.mapValues(on: Executor? = conf.Q.map, crossinline transform: (E) -> U): Promise<Iterable<U>> {
-    return map(on = on){ it.map(transform) }
+inline fun <E, T : Iterable<E>, U> Thenable<T>.mapValues(on: Executor? = conf.Q.map, crossinline transform: (E) -> U): Promise<Iterable<U>> {
+    return map(on = on) { it.map(transform) }
 }
 
 /**
@@ -305,7 +305,7 @@ inline fun <E, T: Iterable<E>, U> Thenable<T>.mapValues(on: Executor? = conf.Q.m
  *      // it => [1,1,2,2,3,3]
  *   }
  */
-inline fun <E, T: Iterable<E>, UE, U: Iterable<UE>> Thenable<T>.flatMapValues(on: Executor? = conf.Q.map, crossinline transform: (E) -> U): Promise<Iterable<UE>> {
+inline fun <E, T : Iterable<E>, UE, U : Iterable<UE>> Thenable<T>.flatMapValues(on: Executor? = conf.Q.map, crossinline transform: (E) -> U): Promise<Iterable<UE>> {
     return map(on = on) { foo ->
         foo.flatMap {
             transform(it).flatMap { listOf(it) }
@@ -324,7 +324,7 @@ inline fun <E, T: Iterable<E>, UE, U: Iterable<UE>> Thenable<T>.flatMapValues(on
  *      // it => [1,2,3]
  *   }
  */
-inline fun <E, T: Iterable<E>, U> Thenable<T>.compactMapValues(on: Executor? = conf.Q.map, crossinline transform: (E) -> U?): Promise<Iterable<U>> {
+inline fun <E, T : Iterable<E>, U> Thenable<T>.compactMapValues(on: Executor? = conf.Q.map, crossinline transform: (E) -> U?): Promise<Iterable<U>> {
     return map(on = on) { foo ->
         foo.flatMap {
             val value = transform(it)
@@ -344,7 +344,7 @@ inline fun <E, T: Iterable<E>, U> Thenable<T>.compactMapValues(on: Executor? = c
  *      // it => [2,4,6]
  *   }
  */
-fun <E, T: Iterable<E>, U, TU: Thenable<U>> Thenable<T>.thenMapValues(on: Executor? = conf.Q.map, transform: (E) -> TU): Promise<Iterable<U>> {
+fun <E, T : Iterable<E>, U, TU : Thenable<U>> Thenable<T>.thenMapValues(on: Executor? = conf.Q.map, transform: (E) -> TU): Promise<Iterable<U>> {
     val rp = Promise<Iterable<U>>(PMKUnambiguousInitializer.pending)
     pipe {
         when (it) {
@@ -377,7 +377,7 @@ fun <E, T: Iterable<E>, U, TU: Thenable<U>> Thenable<T>.thenMapValues(on: Execut
  *      // it => [1,1,2,2,3,3]
  *   }
  */
-fun <E, T: Iterable<E>, UE, U: Iterable<UE>, TU: Thenable<U>> Thenable<T>.thenFlatMapValues(on: Executor? = conf.Q.map, transform: (E) -> TU): Promise<Iterable<UE>> {
+fun <E, T : Iterable<E>, UE, U : Iterable<UE>, TU : Thenable<U>> Thenable<T>.thenFlatMapValues(on: Executor? = conf.Q.map, transform: (E) -> TU): Promise<Iterable<UE>> {
     val rp = Promise<Iterable<UE>>(PMKUnambiguousInitializer.pending)
     pipe {
         when (it) {
@@ -410,14 +410,14 @@ fun <E, T: Iterable<E>, UE, U: Iterable<UE>, TU: Thenable<U>> Thenable<T>.thenFl
  *      // it => [2,3]
  *   }
  */
-inline fun <E, T: Iterable<E>> Thenable<T>.filterValues(on: Executor? = conf.Q.map, crossinline isIncluded: (E) -> Boolean): Promise<Iterable<E>> {
-    return map(on = on) { it.filter(isIncluded)}
+inline fun <E, T : Iterable<E>> Thenable<T>.filterValues(on: Executor? = conf.Q.map, crossinline isIncluded: (E) -> Boolean): Promise<Iterable<E>> {
+    return map(on = on) { it.filter(isIncluded) }
 }
 
 /**
  * Returns a promise fulfilled with the first value of this `Iterable` or, if empty, a promise rejected with PMKError.emptySequence.
  */
-val <E, T: Iterable<E>> Thenable<T>.firstValue: Promise<E>
+val <E, T : Iterable<E>> Thenable<T>.firstValue: Promise<E>
     get() {
     return map(on = null) { aa ->
         try {
@@ -431,7 +431,7 @@ val <E, T: Iterable<E>> Thenable<T>.firstValue: Promise<E>
 /**
  * Returns a promise fulfilled with the last value of this `Iterable` or, if empty, a promise rejected with PMKError.emptySequence.
  */
-val <E, T: Iterable<E>> Thenable<T>.lastValue: Promise<E>
+val <E, T : Iterable<E>> Thenable<T>.lastValue: Promise<E>
     get() {
     return map(on = null) { aa ->
         try {
@@ -445,6 +445,6 @@ val <E, T: Iterable<E>> Thenable<T>.lastValue: Promise<E>
 /**
  * Returns a promise fulfilled with the sorted values of this `Iterable`.
  */
-inline fun <E: Comparable<E>, T: Iterable<E>> Thenable<T>.sortedValues(on: Executor? = conf.Q.map, crossinline selector: (E) -> E?): Promise<Iterable<E>> {
+inline fun <E : Comparable<E>, T : Iterable<E>> Thenable<T>.sortedValues(on: Executor? = conf.Q.map, crossinline selector: (E) -> E?): Promise<Iterable<E>> {
     return map(on = on) { it.sortedBy(selector) }
 }

@@ -5,7 +5,7 @@ import java.util.concurrent.Executor
 /**
  * Provides `catch` and `recover` to your object that conforms to `Thenable`
  */
-interface CatchMixin<T>: Thenable<T>
+interface CatchMixin<T> : Thenable<T>
 
 /**
  * The provided closure executes when this promise rejects.
@@ -68,7 +68,7 @@ class PMKFinalizer {
  * @param on: The executor to which the provided closure dispatches.
  * @param body: The handler to execute if this promise is rejected.
  */
-fun <T, U: Thenable<T>> CatchMixin<T>.recover(on: Executor? = conf.Q.map, policy: CatchPolicy = conf.catchPolicy, body: (Throwable) -> U): Promise<T> {
+fun <T, U : Thenable<T>> CatchMixin<T>.recover(on: Executor? = conf.Q.map, policy: CatchPolicy = conf.catchPolicy, body: (Throwable) -> U): Promise<T> {
     val rp = Promise<T>(PMKUnambiguousInitializer.pending)
     pipe {
         when (it) {

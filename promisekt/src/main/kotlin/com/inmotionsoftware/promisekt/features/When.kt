@@ -6,7 +6,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-private fun <T, U: Thenable<T>> _when(thenables: Iterable<U>, executor: ExecutorService = Executors.newCachedThreadPool()): Promise<Unit> {
+private fun <T, U : Thenable<T>> _when(thenables: Iterable<U>, executor: ExecutorService = Executors.newCachedThreadPool()): Promise<Unit> {
     val countdown = AtomicInteger(thenables.count())
     if (countdown.get() == 0) return Promise.value(Unit)
 
@@ -62,7 +62,7 @@ private fun <T, U: Thenable<T>> _when(thenables: Iterable<U>, executor: Executor
  * @param thenables: The promises upon which to wait before the returned promise resolves.
  * @return: A new promise that resolves when all the provided promises fulfill or one of the provided promises rejects.
  */
-fun <T, U: Thenable<T>> whenFulfilled(thenables: Iterable<U>): Promise<Iterable<T>> {
+fun <T, U : Thenable<T>> whenFulfilled(thenables: Iterable<U>): Promise<Iterable<T>> {
     return _when(thenables).map(on = null) { thenables.map { it.value!! } }
 }
 
@@ -78,7 +78,7 @@ fun <T, U: Thenable<T>> whenFulfilled(thenables: Iterable<U>): Promise<Iterable<
  * @param concurrently: The number of concurent promises to execute simultaneously
  * @return: A new promise that resolves when all the provided promises fulfill or one of the provided promises rejects.
  */
-fun <T, U: Thenable<T>> whenFulfilled(promises: Iterable<U>, concurrently: Int): Promise<Iterable<T>> {
+fun <T, U : Thenable<T>> whenFulfilled(promises: Iterable<U>, concurrently: Int): Promise<Iterable<T>> {
     if (concurrently <= 0) return Promise(error = PMKError.badInput())
 
     val generator = promises.iterator()
@@ -110,7 +110,7 @@ fun <T, U: Thenable<T>> whenFulfilled(promises: Iterable<U>, concurrently: Int):
         fun testDone() {
             DispatchExecutor.global.sync {
                 if (pendingPromises.get() == 0) {
-                    root.second.fulfill(promiseList.flatMap{
+                    root.second.fulfill(promiseList.flatMap {
                         if (it.value != null) arrayListOf(it.value!!) else arrayListOf()
                     })
                 }
@@ -145,21 +145,21 @@ fun <T, U: Thenable<T>> whenFulfilled(promises: Iterable<U>, concurrently: Int):
 /**
  * Wait for all promises in a set to fulfill.
  */
-fun <T, U: Thenable<T>> whenFulfilled(vararg promises: U): Promise<Iterable<T>> {
+fun <T, U : Thenable<T>> whenFulfilled(vararg promises: U): Promise<Iterable<T>> {
     return whenFulfilled(promises.asIterable())
 }
 
 /**
  * Wait for all promises in a set to fulfill.
  */
-fun <TU, U: Thenable<TU>, TV, V: Thenable<TV>> whenFulfilled(pu: U, pv: V): Promise<Pair<TU, TV>> {
+fun <TU, U : Thenable<TU>, TV, V : Thenable<TV>> whenFulfilled(pu: U, pv: V): Promise<Pair<TU, TV>> {
     return _when(arrayListOf(pu.asVoid(), pv.asVoid())).map(on = null) { Pair(pu.value!!, pv.value!!) }
 }
 
 /**
  * Wait for all promises in a set to fulfill.
  */
-fun <TU, U: Thenable<TU>, TV, V: Thenable<TV>, TW, W: Thenable<TW>> whenFulfilled(pu: U, pv: V, pw: W): Promise<Triple<TU, TV, TW>> {
+fun <TU, U : Thenable<TU>, TV, V : Thenable<TV>, TW, W : Thenable<TW>> whenFulfilled(pu: U, pv: V, pw: W): Promise<Triple<TU, TV, TW>> {
     return _when(arrayListOf(pu.asVoid(), pv.asVoid(), pw.asVoid())).map(on = null) { Triple(pu.value!!, pv.value!!, pw.value!!) }
 }
 

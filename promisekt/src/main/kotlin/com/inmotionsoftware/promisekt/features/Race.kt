@@ -13,7 +13,7 @@ import com.inmotionsoftware.promisekt.*
  * Warning: If any of the provided promises reject, the returned promise is rejected.
  * Remark: Returns promise rejected with PMKError.badInput if empty list provided
  */
-fun <T, U: Thenable<T>> race(vararg thenables: U): Promise<T> {
+fun <T, U : Thenable<T>> race(vararg thenables: U): Promise<T> {
     return race(thenables.asIterable())
 }
 
@@ -28,7 +28,7 @@ fun <T, U: Thenable<T>> race(vararg thenables: U): Promise<T> {
  * Warning: If any of the provided promises reject, the returned promise is rejected.
  * Remark: Returns promise rejected with PMKError.badInput if empty list provided
  */
-fun <T, U: Thenable<T>> race(thenables: Iterable<U>): Promise<T> {
+fun <T, U : Thenable<T>> race(thenables: Iterable<U>): Promise<T> {
     if (thenables.count() == 0) return Promise(error = PMKError.badInput())
 
     val rp = Promise<T>(PMKUnambiguousInitializer.pending)
@@ -47,7 +47,7 @@ fun <T, U: Thenable<T>> race(thenables: Iterable<U>): Promise<T> {
  *
  * @return: A new guarantee that resolves when the first guaranteed in the provided guarantees resolves.
  */
-fun <T, U: Guarantee<T>> raceGuarantee(vararg guarantees: U): Guarantee<T> {
+fun <T, U : Guarantee<T>> raceGuarantee(vararg guarantees: U): Guarantee<T> {
     return raceGuarantee(guarantees.asIterable())
 }
 
@@ -60,7 +60,7 @@ fun <T, U: Guarantee<T>> raceGuarantee(vararg guarantees: U): Guarantee<T> {
  *
  * @return: A new guarantee that resolves when the first guaranteed in the provided guarantees resolves.
  */
-fun <T, U: Guarantee<T>> raceGuarantee(guarantees: Iterable<U>): Guarantee<T> {
+fun <T, U : Guarantee<T>> raceGuarantee(guarantees: Iterable<U>): Guarantee<T> {
     val rg = Guarantee<T>(PMKUnambiguousInitializer.pending)
     guarantees.forEach {
         it.pipeTo(to = rg.box::seal)

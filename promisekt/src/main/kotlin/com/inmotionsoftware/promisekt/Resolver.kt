@@ -29,7 +29,7 @@ fun <T> Resolver<T>.resolve(value: T?, error: Throwable?) {
     }
 }
 
-fun <T>Resolver<T>.resolve(error: Throwable?, obj: T?) {
+fun <T> Resolver<T>.resolve(error: Throwable?, obj: T?) {
     this.resolve(obj, error)
 }
 
@@ -40,9 +40,9 @@ fun Resolver<Unit>.resolve(error: Throwable?) {
     }
 }
 
-sealed class Result<T>{
-    class fulfilled<T>(val value: T): Result<T>()
-    class rejected<T>(val error: Throwable): Result<T>()
+sealed class Result<T> {
+    class fulfilled<T>(val value: T) : Result<T>()
+    class rejected<T>(val error: Throwable) : Result<T>()
 }
 
 val <T> Result<T>.isFulfilled: Boolean get() {

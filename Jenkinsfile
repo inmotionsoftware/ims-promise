@@ -67,7 +67,7 @@ pipeline {
         }
       }
     }
-    stage('Build APK') {
+    stage('Build Jar') {
       steps {
         dir('promisekt') {
           sh './gradlew clean promisekt:artifactoryPublish -Partifactory.url=$ARTIFACTORY_URL -Partifactory.user=$ARTIFACTORY_USR -Partifactory.password=$ARTIFACTORY_PSW'
@@ -78,9 +78,8 @@ pipeline {
     stage('Static analysis') {
       steps {
         dir('promisekt') {
-          androidLint pattern: '**/lint-results-*.xml'
-          archiveArtifacts '**/lint-results-*.html'
-          archiveArtifacts '**/lint-results-*.xml'
+          sh './gradlew promisekt:detektCheck'
+          archiveArtifacts 'reports/*.*'
         }
       }
     }

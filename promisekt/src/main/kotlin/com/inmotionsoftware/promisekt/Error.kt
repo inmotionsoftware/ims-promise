@@ -1,23 +1,23 @@
 package com.inmotionsoftware.promisekt
 
-sealed class PMKError: Throwable {
+sealed class PMKError : Throwable {
     constructor(): super()
     constructor(message: String): super(message = message)
     constructor(cause: Throwable): super(cause = cause)
     constructor(message: String, cause: Throwable): super(message = message, cause = cause)
 
-    class invalidCallingConvention:
+    class invalidCallingConvention :
             PMKError("A closure was called with an invalid calling convention, probably (null, null)")
-    class returnedSelf:
+    class returnedSelf :
             PMKError("A promise handler returned itself")
-    class badInput:
+    class badInput :
             PMKError("Bad input was provided to a IMSPromise function")
-    class cancelled:
+    class cancelled :
             PMKError("The asynchronous sequence was cancelled")
-    class compactMap /*(val obj: Any, val type: Class<Any>) */:
+    class compactMap /*(val obj: Any, val type: Class<Any>) */ :
 //            PMKError("Could not compactMap<($type)>: ($obj)")
             PMKError("Could not compactMap")
-    class emptySequence:
+    class emptySequence :
             PMKError("The first or last element was requested for an empty sequence")
 }
 
@@ -36,6 +36,5 @@ val Throwable.isCancelled: Boolean get() {
 }
 
 enum class CatchPolicy {
-    allErrors
-    , allErrorsExceptCancellation
+    allErrors, allErrorsExceptCancellation
 }

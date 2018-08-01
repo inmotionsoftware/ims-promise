@@ -6,7 +6,7 @@ import java.util.concurrent.Executor
 /**
  * A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
  */
-class Guarantee<T>: Thenable<T> {
+class Guarantee<T> : Thenable<T> {
     internal val box: Box<T>
 
     internal constructor(box: Box<T>) {
@@ -38,7 +38,7 @@ class Guarantee<T>: Thenable<T> {
 
     internal fun pipeTo(to: (T) -> Unit) {
         val sealant = this.box.inspect()
-        when(sealant) {
+        when (sealant) {
             is Sealant.pending -> {
                 this.box.inspect {
                     when (it) {
