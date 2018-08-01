@@ -59,14 +59,14 @@ pipeline {
         }
       }
     }
-//    stage('Unit test') {
-//      steps {
-//        dir('promisekt') {
-//          sh './gradlew testDebugUnitTest testDebugUnitTest'
-//          junit '**/TEST-*.xml'
-//        }
-//      }
-//    }
+    stage('Unit test') {
+      steps {
+        dir('promisekt') {
+          sh './gradlew testDebugUnitTest testDebugUnitTest'
+          junit '**/TEST-*.xml'
+        }
+      }
+    }
     stage('Build APK') {
       steps {
         dir('promisekt') {
@@ -78,7 +78,6 @@ pipeline {
     stage('Static analysis') {
       steps {
         dir('promisekt') {
-          sh './gradlew lintDebug'
           androidLint pattern: '**/lint-results-*.xml'
           archiveArtifacts '**/lint-results-*.html'
           archiveArtifacts '**/lint-results-*.xml'
