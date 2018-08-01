@@ -71,7 +71,7 @@ pipeline {
       steps {
         dir('promisekt') {
           sh './gradlew clean promisekt:artifactoryPublish -Partifactory.url=$ARTIFACTORY_URL -Partifactory.user=$ARTIFACTORY_USR -Partifactory.password=$ARTIFACTORY_PSW'
-          archiveArtifacts '**/*.apk'
+          archiveArtifacts '**/*.jar'
         }
       }
     }

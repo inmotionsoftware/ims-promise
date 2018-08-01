@@ -10,10 +10,10 @@ import java.util.concurrent.CountDownLatch
 
 class WhenTests: AsyncTests() {
 
-    private sealed class TestError: Throwable() {
-        class test1: TestError()
-        class test2: TestError()
-        class test3: TestError()
+    private sealed class TestError(message:String): Throwable() {
+        class test1: TestError("Test Error 1")
+        class test2: TestError("Test Error 2")
+        class test3: TestError("Test Error 3")
     }
 
     @Test
@@ -112,6 +112,7 @@ class WhenTests: AsyncTests() {
         val p3 = Promise<Void>(error = TestError.test3())
 
         whenFulfilled(p1, p2, p3).catch { error ->
+            error.printStackTrace()
             assertTrue(error == test1)
             e.countDown()
         }
