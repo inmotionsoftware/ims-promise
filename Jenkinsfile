@@ -62,8 +62,8 @@ pipeline {
     stage('Unit test') {
       steps {
         dir('promisekt') {
-          sh './gradlew testDebugUnitTest testDebugUnitTest'
-          junit '**/TEST-*.xml'
+          sh './gradlew test'
+          archiveArtifacts '**/TEST-*.xml'
         }
       }
     }
