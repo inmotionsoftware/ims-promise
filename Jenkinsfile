@@ -62,7 +62,7 @@ pipeline {
     stage('Unit test') {
       steps {
         dir('promisekt') {
-          sh './gradlew clean test --info'
+          sh './gradlew clean test'
           archiveArtifacts '**/TEST-*.xml'
         }
       }
