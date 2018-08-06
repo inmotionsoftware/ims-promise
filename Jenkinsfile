@@ -70,7 +70,7 @@ pipeline {
     stage('Build Jar') {
       steps {
         dir('promisekt') {
-          sh './gradlew clean promisekt:artifactoryPublish -Partifactory.url=$ARTIFACTORY_URL -Partifactory.user=$ARTIFACTORY_USR -Partifactory.password=$ARTIFACTORY_PSW'
+          sh './gradlew -x test promisekt:artifactoryPublish -Partifactory.url=$ARTIFACTORY_URL -Partifactory.user=$ARTIFACTORY_USR -Partifactory.password=$ARTIFACTORY_PSW'
           archiveArtifacts '**/*.jar'
         }
       }
