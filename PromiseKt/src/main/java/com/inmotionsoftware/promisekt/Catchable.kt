@@ -26,6 +26,7 @@ fun <T> CatchMixin<T>.catch(on: Executor? = PMKConfiguration.Q.`return`, policy:
         when (it) {
             is Result.rejected -> {
                 if (policy == CatchPolicy.allErrors || !it.error.isCancelled) {
+                    it.error.checkIgnoredExceptions()
                     on.async {
                         body(it.error)
                         finalizer.pending.second(Unit)
@@ -77,6 +78,7 @@ fun <T, U: Thenable<T>> CatchMixin<T>.recover(on: Executor? = PMKConfiguration.Q
             }
             is Result.rejected -> {
                 if (policy == CatchPolicy.allErrors || !it.error.isCancelled) {
+                    it.error.checkIgnoredExceptions()
                     on.async {
                         try {
                             val rv = body(it.error)
@@ -186,5 +188,13 @@ fun <T> CatchMixin<T>.ensureThen(on: Executor? = PMKConfiguration.Q.`return`, bo
 fun <T> CatchMixin<T>.cauterize() {
     catch {
         println("PromiseKot:cauterized-error: $it")
+    }
+}
+
+private fun Throwable.checkIgnoredExceptions() {
+    CatchPolicy.doNotCatch.forEach { notCatchable ->
+        if(notCatchable.isAssignableFrom(this::class.java)) {
+            throw this
+        }
     }
 }

@@ -37,5 +37,13 @@ val Throwable.isCancelled: Boolean get() {
 
 enum class CatchPolicy {
     allErrors
-    , allErrorsExceptCancellation
+    , allErrorsExceptCancellation;
+
+    companion object {
+        internal val doNotCatch = mutableListOf<Class<Throwable>>()
+
+        fun <T: Throwable> addIgnoredException(ignored: Class<T>) {
+            doNotCatch.add(ignored as Class<Throwable>)
+        }
+    }
 }
