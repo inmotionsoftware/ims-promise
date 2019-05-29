@@ -40,7 +40,7 @@ enum class CatchPolicy {
     , allErrorsExceptCancellation;
 
     companion object {
-        internal val doNotCatch = mutableListOf<Class<Throwable>>()
+        internal val doNotCatch = mutableSetOf<Class<Throwable>>()
 
         fun <T: Throwable> addIgnoredException(ignored: Class<T>) {
             doNotCatch.add(ignored as Class<Throwable>)
